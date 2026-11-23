@@ -200,10 +200,10 @@ kbd{background:#0f1826;border:1px solid var(--line);border-radius:6px;padding:1p
         <div><label for="bBase">Адрес API (с /v1)</label><input id="bBase" placeholder="https://llm.example/v1"></div>
         <div><label for="bModel">Модель</label>
           <div class="row" style="gap:6px;flex-wrap:nowrap">
-            <input id="bModel" list="modelList" placeholder="gpt-4.1-mini" style="flex:1;min-width:110px">
+            <select id="bModel" onchange="modelChoice()" style="flex:1;min-width:110px"></select>
             <button class="btn" onclick="loadModels()" title="Загрузить список моделей">↻</button>
           </div>
-          <datalist id="modelList"></datalist>
+          <input id="bModelCustom" class="hidden" placeholder="точное имя модели" style="margin-top:6px">
         </div>
         <div><label for="bApi">Тип API</label><select id="bApi"><option value="chat_completions">Chat Completions</option><option value="responses">Responses</option><option value="chatgpt">chatgpt</option></select></div>
         <div><label for="bKey">Ключ API</label><input id="bKey" type="password" autocomplete="off" placeholder="если нужен"></div>
@@ -290,6 +290,24 @@ kbd{background:#0f1826;border:1px solid var(--line);border-radius:6px;padding:1p
         <li>При <kbd>ice_gather_timeout</kbd> попробуйте выключить STUN и перезапустить GPT.</li>
         <li>Подробности — в «Журнал GPT» и на странице клиента.</li>
       </ol>
+    </div>
+
+    <div class="box">
+      <h2>Вход ChatGPT по подписке (OAuth)</h2>
+      <p>В режиме <kbd>chatgpt</kbd> Bridge не использует API-ключ: вход хранится в
+      <kbd>/data/opt/quasar-bridge/chatgpt-auth.json</kbd>. Когда сессия истекает, список
+      моделей пуст, а Bridge пишет «ChatGPT sign-in unavailable».</p>
+      <p>Вход выполняется на станции, браузер — на компьютере. Callback слушает
+      <kbd>127.0.0.1:1455</kbd> <b>на станции</b>, поэтому с компьютера нужен SSH-туннель:</p>
+      <pre>ssh -p 2222 -N -L 127.0.0.1:1455:127.0.0.1:1455 root@<span class="speaker-ip">SPEAKER_IP</span></pre>
+      <p>Во втором терминале запустите вход и откройте ссылку в браузере:</p>
+      <pre>ssh -t -p 2222 root@<span class="speaker-ip">SPEAKER_IP</span> 'sh /data/opt/quasar-bridge/app/control.sh chatgpt-login'</pre>
+      <p>После входа проверьте статус и модели:</p>
+      <pre>ssh -p 2222 root@<span class="speaker-ip">SPEAKER_IP</span> 'sh /data/opt/quasar-bridge/app/control.sh chatgpt-status'
+ssh -p 2222 root@<span class="speaker-ip">SPEAKER_IP</span> 'sh /data/opt/quasar-bridge/app/control.sh chatgpt-models'</pre>
+      <p>Туннель после входа можно закрыть. В панели нажмите ↻ у поля «Модель».</p>
+      <p class="muted small">Порт 1455 на компьютере должен быть свободен. Ссылка входа
+      одноразовая: если истекла — запустите <kbd>chatgpt-login</kbd> заново.</p>
     </div>
 
     <div class="box">
@@ -417,13 +435,15 @@ async function loadBridgeLog(){try{const text=await get('bridge_logs');BRIDGE_LO
 function toggleLogAuto(){if($('logAuto').checked){if(!logTimer)logTimer=setInterval(()=>{if(document.querySelector('nav button[data-tab="bridge"]').classList.contains('active'))loadBridgeLog()},5000)}else{clearInterval(logTimer);logTimer=null}}
 async function loadConfig(){try{$('config').value=await get('bridge_config');EDITING=true;toast('Конфиг загружен.')}catch(e){toast(e.message,true)}}
 async function saveConfig(){const text=$('config').value;if(!text.trim().startsWith('{')){toast('Конфиг должен начинаться с {',true);return}if(!confirm('Сохранить конфиг Bridge? Он будет проверен; при ошибке вернётся прежний.'))return;if(BUSY)return;busy(true);try{const data=await post('bridge_config',null,text);EDITING=false;toast(data.message||'Сохранено.');await refresh()}catch(e){toast(e.message||'Ошибка.',true)}finally{busy(false)}}
-async function loadBridgeEnv(){try{const d=JSON.parse(await get('bridge_env'));$('bMode').value=d.mode||'hybrid';$('bBase').value=d.base_url||'';$('bModel').value=d.model||'';const api=$('bApi'),v=d.api||'chat_completions';if(![...api.options].some(o=>o.value===v)){const o=document.createElement('option');o.value=v;o.textContent=v;api.append(o)}api.value=v;$('bKey').value=d.api_key||'';$('bHome').value=d.home_mcp_url||'';fillModels([]);toast('Подключение загружено.')}catch(e){toast(e.message,true)}}
+async function loadBridgeEnv(){try{const d=JSON.parse(await get('bridge_env'));$('bMode').value=d.mode||'hybrid';$('bBase').value=d.base_url||'';$('bModelCustom').value='';fillModels([],d.model||'');const api=$('bApi'),v=d.api||'chat_completions';if(![...api.options].some(o=>o.value===v)){const o=document.createElement('option');o.value=v;o.textContent=v;api.append(o)}api.value=v;$('bKey').value=d.api_key||'';$('bHome').value=d.home_mcp_url||'';toast('Подключение загружено.')}catch(e){toast(e.message,true)}}
 const MODEL_FALLBACK=['gpt-4.1','gpt-4.1-mini','gpt-4o','gpt-4o-mini','o3-mini','o4-mini'].map(id=>({id,name:id}));
-function fillModels(extra){const dl=$('modelList'),items=[];const current=val('bModel');if(current)items.push({id:current,name:current});items.push(...MODEL_FALLBACK);items.push(...(extra||[]).map(m=>typeof m==='string'?{id:m,name:m}:m));const seen=new Set(),nodes=[];for(const item of items){const id=item&&item.id;if(!id||seen.has(id))continue;seen.add(id);const o=document.createElement('option');o.value=id;o.textContent=(item.name&&item.name!==id)?item.name:id;nodes.push(o)}dl.replaceChildren(...nodes)}
-async function loadModels(){try{const d=await getJson('bridge_models');const list=(d.models||[]).map(m=>typeof m==='string'?{id:m,name:m}:m);fillModels(list);toast('Моделей: '+list.length)}catch(e){fillModels([]);toast(e.message||'Список моделей недоступен.',true)}}
+function modelValue(){const s=$('bModel');return s&&s.value!=='__custom__'?s.value:val('bModelCustom')}
+function modelChoice(){const custom=$('bModel').value==='__custom__';$('bModelCustom').classList.toggle('hidden',!custom);if(custom)$('bModelCustom').focus()}
+function fillModels(extra,current){const select=$('bModel'),want=current!==undefined?current:modelValue(),items=[];if(want)items.push({id:want,name:want});items.push(...MODEL_FALLBACK);items.push(...(extra||[]).map(m=>typeof m==='string'?{id:m,name:m}:m));const seen=new Set(),nodes=[];for(const item of items){const id=item&&item.id;if(!id||seen.has(id))continue;seen.add(id);const o=document.createElement('option');o.value=id;o.textContent=(item.name&&item.name!==id)?item.name:id;nodes.push(o)}const custom=document.createElement('option');custom.value='__custom__';custom.textContent='Другая модель…';nodes.push(custom);select.replaceChildren(...nodes);if([...select.options].some(o=>o.value===want))select.value=want;else select.value='__custom__';if(select.value==='__custom__'&&want)$('bModelCustom').value=want;modelChoice()}
+async function loadModels(){try{const d=await getJson('bridge_models');const list=(d.models||[]).map(m=>typeof m==='string'?{id:m,name:m}:m);fillModels(list,modelValue());toast('Моделей: '+list.length)}catch(e){fillModels([],modelValue());toast(e.message||'Список моделей недоступен.',true)}}
 function saveGptLook(){act('gpt_settings',{voice:val('voice'),style:val('ledStyle'),scope:val('ledScope'),listen:val('listenLed')})}
 function saveGptNetwork(){const changed=last&&String(last.flags.stun)!==val('stun');if(changed&&!confirm('STUN изменится: GPT будет перезапущен. Сохранить?'))return;act('gpt_settings',{autostart:val('autoGpt'),vpn_autostart:val('autoVpn'),stun:val('stun')})}
-function saveBridgeEnv(){if(!confirm('Сохранить подключение и перезапустить Bridge? Голос на несколько секунд прервётся.'))return;act('bridge_env',{mode:val('bMode'),base_url:val('bBase'),model:val('bModel'),api:val('bApi'),api_key:val('bKey'),home_mcp_url:val('bHome')})}
+function saveBridgeEnv(){if(!confirm('Сохранить подключение и перезапустить Bridge? Голос на несколько секунд прервётся.'))return;act('bridge_env',{mode:val('bMode'),base_url:val('bBase'),model:modelValue(),api:val('bApi'),api_key:val('bKey'),home_mcp_url:val('bHome')})}
 function toggleKey(){$('bKey').type=$('showKey').checked?'text':'password'}
 
 function loadPhrases(){const p=(last&&last.phrases)||{};$('pOpen').value=p.open||'';$('pNew').value=p.new||'';$('pClose').value=p.close||'';$('pPrevious').value=p.previous||''}
@@ -501,6 +521,7 @@ document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()
   history.replaceState(null,'','#'+b.dataset.tab);
 }));
 if(location.hash)showTab(location.hash.slice(1));
+document.querySelectorAll('.speaker-ip').forEach(el=>{const h=location.hostname;if(h&&!/^(localhost|127\.|0\.0\.0\.0)/.test(h))el.textContent=h});
 init();
 </script>
 </body>
