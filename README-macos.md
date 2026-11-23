@@ -12,7 +12,7 @@
 
 - macOS, Python 3.10+ (`brew install python`, если системный старее), `curl`, `patch`.
 - Google Chrome, Microsoft Edge или Chromium для однократного входа в ChatGPT.
-- Станция с root и SSH. Для Станции 2 обычно порт `2222`.
+- Станция с root и SSH — [инструкции hackalice.me](https://hackalice.me/start/). Для Станции 2 обычно порт `2222`.
 
 ## Установка
 

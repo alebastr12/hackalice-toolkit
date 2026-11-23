@@ -13,7 +13,7 @@ Alisa Panel        SPEAKER_IP · Станция 2 · 0.369.1.46
 
 ## Что нужно
 
-- Станция с root и SSH (уже настроены).
+- Станция с уже полученными root и SSH — [инструкции hackalice.me](https://hackalice.me/start/).
 - Entware на станции. `lighttpd` с CGI/Basic auth установщик поставит сам
   (`opkg install lighttpd lighttpd-mod-cgi lighttpd-mod-auth lighttpd-mod-authn_file lighttpd-mod-access`).
   В прошивке этой Станции BusyBox `httpd` отсутствует.
