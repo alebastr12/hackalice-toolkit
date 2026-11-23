@@ -51,6 +51,14 @@ class ApiTest(unittest.TestCase):
             '*) echo ok;;\n'
             'esac\n')
         (self.bridge / 'app' / 'control.sh').chmod(0o755)
+        (self.bridge / 'app' / 'start.sh').write_text(
+            '#!/bin/sh\n'
+            'if [ "${ALISA_TEST_CHATGPT_EXPIRED:-}" = 1 ]; then\n'
+            '  echo "{\\"error\\":\\"ChatGPT sign-in unavailable\\"}" >&2\n'
+            '  exit 1\n'
+            'fi\n'
+            'printf \'model-a\\t"Model A"\\nmodel-b\\t"Model B"\\n\'\n')
+        (self.bridge / 'app' / 'start.sh').chmod(0o755)
         (self.cli / 'vpn.sh').write_text(
             '#!/bin/sh\n'
             f'state={self.cli}\n'
@@ -224,7 +232,19 @@ class ApiTest(unittest.TestCase):
         status, payload = self.call(query='action=bridge_models')
         data = json.loads(payload)
         self.assertTrue(data['ok'], payload)
-        self.assertEqual(data['models'], ['model-a', 'model-b'])
+        self.assertEqual([m['id'] for m in data['models']], ['model-a', 'model-b'])
+        self.assertEqual(data['models'][0]['name'], 'Model A')
+
+    def test_bridge_models_requires_chatgpt_login(self):
+        self.env['ALISA_TEST_CHATGPT_EXPIRED'] = '1'
+        try:
+            status, payload = self.call(query='action=bridge_models')
+        finally:
+            self.env.pop('ALISA_TEST_CHATGPT_EXPIRED', None)
+        self.assertIn('409', status)
+        data = json.loads(payload)
+        self.assertFalse(data['ok'])
+        self.assertIn('ChatGPT', data['error'])
 
     def test_bridge_env_read(self):
         status, payload = self.call(query='action=bridge_env')

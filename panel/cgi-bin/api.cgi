@@ -116,43 +116,34 @@ GET)
                 respond '200 OK' application/json
             ;;
         bridge_models)
-            _base=$(bridge_env_value QUASAR_LLM_BASE_URL)
-            case ${_base:-} in ''|http://*|https://*) ;; *) fail_json '400 Bad Request' 'Некорректный адрес API.'; exit 0 ;; esac
-            [ -n "$_base" ] || { fail_json '409 Conflict' 'Не задан адрес API.'; exit 0; }
-            case $_base in */models) _url=$_base ;; *) _url=${_base%/}/models ;; esac
-            _key=$(bridge_env_value QUASAR_LLM_API_KEY)
-            _ca=/system/vendor/quasar/ca-certificates.crt
-            _resp=
-            _curl=$(command -v curl 2>/dev/null || true)
-            if [ -z "$_curl" ]; then
-                for _c in /opt/bin/curl /usr/bin/curl /usr/local/bin/curl; do
-                    [ -x "$_c" ] && _curl=$_c && break
-                done
+            _out=$(mktemp "${TMPDIR:-/tmp}/alisa-models.XXXXXX") || { fail_json '500 Internal Server Error' 'Не удалось создать временный файл.'; exit 0; }
+            _err=$(mktemp "${TMPDIR:-/tmp}/alisa-models-err.XXXXXX") || { rm -f "$_out"; fail_json '500 Internal Server Error' 'Не удалось создать временный файл.'; exit 0; }
+            trap 'rm -f "$_out" "$_err"' EXIT INT TERM
+            sh "$BRIDGE_BASE/app/start.sh" -list-models >"$_out" 2>"$_err" || true
+            if [ ! -s "$_out" ]; then
+                _e=$(tail -n 8 "$_err" 2>/dev/null | tr '\n' ' ' | json_escape)
+                rm -f "$_out" "$_err"
+                trap - EXIT INT TERM
+                case $_e in
+                    *sign-in*|*signin*|*credentials*|*authentication*) fail_json '409 Conflict' 'Нужен вход в ChatGPT на Bridge: sh /data/opt/quasar-bridge/app/control.sh chatgpt-login' ;;
+                    *) fail_json '502 Bad Gateway' "Список моделей не получен: $_e" ;;
+                esac
+                exit 0
             fi
-            if [ -n "$_curl" ]; then
-                if [ -n "$_key" ] && [ -r "$_ca" ]; then
-                    _resp=$("$_curl" -sS -m 10 --cacert "$_ca" -H "Authorization: Bearer $_key" "$_url" 2>/dev/null || true)
-                elif [ -n "$_key" ]; then
-                    _resp=$("$_curl" -sS -m 10 -H "Authorization: Bearer $_key" "$_url" 2>/dev/null || true)
-                elif [ -r "$_ca" ]; then
-                    _resp=$("$_curl" -sS -m 10 --cacert "$_ca" "$_url" 2>/dev/null || true)
-                else
-                    _resp=$("$_curl" -sS -m 10 "$_url" 2>/dev/null || true)
-                fi
-            elif command -v wget >/dev/null 2>&1; then
-                if [ -n "$_key" ]; then
-                    _resp=$(wget -q -T 10 -t 1 -O - --header="Authorization: Bearer $_key" "$_url" 2>/dev/null || true)
-                else
-                    _resp=$(wget -q -T 10 -t 1 -O - "$_url" 2>/dev/null || true)
-                fi
-            fi
-            _ids=$(printf '%s' "$_resp" | tr ',' '\n' | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sort -u | head -100)
-            [ -n "$_ids" ] || { fail_json '502 Bad Gateway' 'Не удалось получить список моделей. Проверьте адрес, ключ и доступность API.'; exit 0; }
             _json=
-            for _m in $_ids; do
-                _esc=$(printf '%s' "$_m" | json_escape)
-                _json="$_json${_json:+,}\"$_esc\""
-            done
+            while IFS="$(printf '\t')" read -r _id _name; do
+                [ -n "$_id" ] || continue
+                _id=$(printf '%s' "$_id" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                _name=$(printf '%s' "$_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//')
+                [ -n "$_id" ] || continue
+                [ -n "$_name" ] || _name=$_id
+                _id_esc=$(printf '%s' "$_id" | json_escape)
+                _name_esc=$(printf '%s' "$_name" | json_escape)
+                _json="$_json${_json:+,}{\"id\":\"$_id_esc\",\"name\":\"$_name_esc\"}"
+            done < "$_out"
+            rm -f "$_out" "$_err"
+            trap - EXIT INT TERM
+            [ -n "$_json" ] || { fail_json '502 Bad Gateway' 'Список моделей пуст.'; exit 0; }
             printf '{"ok":true,"models":[%s]}' "$_json" | respond '200 OK' application/json
             ;;
         *)
