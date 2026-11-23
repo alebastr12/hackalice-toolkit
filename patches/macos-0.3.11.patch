@@ -1,0 +1,528 @@
+diff --git a/alisa_cli/autostart.py b/alisa_cli/autostart.py
+index 59e6f6a..b64669b 100644
+--- a/alisa_cli/autostart.py
++++ b/alisa_cli/autostart.py
+@@ -50,7 +50,7 @@ def set_enabled(config,enabled):
+             set_enabled(other,False);save(other)
+     if config['mode']=='native':station_flag(config,'native-autostart',enabled)
+     else:
+-        if sys.platform!='linux':raise RuntimeError('Автозапуск Windows будет проверен отдельным этапом')
++        if sys.platform!='linux':raise RuntimeError('Автозапуск браузерного моста доступен только в Linux')
+         path=Path.home()/'.config/systemd/user/alisa-voice-bridge.service'
+         write_private(path,unit_text(config).encode())
+         subprocess.run(['systemctl','--user','daemon-reload'],check=True,capture_output=True)
+diff --git a/alisa_cli/cli.py b/alisa_cli/cli.py
+index e2a2c84..417009a 100644
+--- a/alisa_cli/cli.py
++++ b/alisa_cli/cli.py
+@@ -4,7 +4,7 @@ from . import doctor,network,runtime,autostart,accounts,vpn
+ from . import ui,ssh_setup,dependencies
+ from . import __version__,updates
+ from .firmware import apply_model,supports_lighting,LIGHTING_UNAVAILABLE
+-if sys.platform=='win32':MODES=('native',)
++if sys.platform in ('win32','darwin'):MODES=('native',)
+ 
+ NAMES={'native':'Нативный — обработка на колонке, ПК после установки не нужен',
+        'bridge':'Мост — браузер ChatGPT на Linux-ПК, колонка передаёт звук'}
+@@ -24,8 +24,8 @@ def show_storage(value):
+ 
+ def installation_help():
+     ui.note('Мастер установки','bold')
+-    for line in [('1. Нативный режим: обработка на колонке.' if sys.platform=='win32' else '1. Выберите нативный режим или браузерный мост.'),
+-      ('2. Введите IP, порт и выберите вход по паролю или существующим ключом.' if sys.platform=='win32' else '2. Введите IP, порт и пароль. После проверки сохранится SSH-ключ.'),
++    for line in [('1. Нативный режим: обработка на колонке.' if sys.platform in ('win32','darwin') else '1. Выберите нативный режим или браузерный мост.'),
++      ('2. Введите IP, порт и выберите вход по паролю или существующим ключом.' if sys.platform in ('win32','darwin') else '2. Введите IP, порт и пароль. После проверки сохранится SSH-ключ.'),
+       '3. Мастер проверит модель, прошивку и компоненты.',
+       '4. Мастер по очереди предложит VPN, автозапуск, фразы и подсветку.',
+       '5. Посмотрите состав пакета, свободное место и итоговый размер.',
+@@ -264,6 +264,8 @@ def wizard(config):
+             dependencies.install(config['mode'],missing=report['host_missing'])
+     report=doctor.inspect(config) if report['host_missing'] else report
+     show(report);doctor.require(config,report=report,warn=False)
++    if report.get('quasar_bridge'):
++        ui.note('На колонке установлен Quasar Bridge. ChatGPT Voice его не меняет: клиент поднимает свой launch-профиль. Микрофоном владеет один режим — при проблемах остановите мост.', 'yellow')
+     apply_model(config,report.get('model'))
+     ui.step(4,'Доступность ChatGPT');network_result=network.check(config);show(network_result)
+     ui.step(5,'Настройка режима')
+diff --git a/alisa_cli/dependencies.py b/alisa_cli/dependencies.py
+index af3438a..83ec38e 100644
+--- a/alisa_cli/dependencies.py
++++ b/alisa_cli/dependencies.py
+@@ -16,6 +16,10 @@ def login_missing():
+     return [tool for tool in ('Xvfb','xauth') if not shutil.which(tool) and not (tool=='Xvfb' and bundled.is_file())]
+ 
+ def require_login_tools():
++    if sys.platform=='darwin':
++        from .mac_browser import browser
++        if browser() is None:raise RuntimeError('Для входа нужен Google Chrome, Microsoft Edge или Chromium. Установите: brew install --cask google-chrome')
++        return
+     missing=login_missing()
+     if not missing:return
+     try:hint=' Выполните: '+shlex.join(command('native',missing=missing))+'.'
+@@ -23,6 +27,7 @@ def require_login_tools():
+     raise RuntimeError('Для сохранения входа ChatGPT на компьютере не хватает: '+', '.join(missing)+'.'+hint+' Прежняя сессия сохранена.')
+ 
+ def command(mode,missing=None):
++    if sys.platform=='darwin':raise RuntimeError('Установите зависимости вручную: brew install --cask google-chrome (SSH входит в macOS)')
+     if sys.platform!='linux':raise RuntimeError('Эта сборка установщика проверяется на Linux')
+     manager=next((name for name in PACKAGE_MANAGERS if shutil.which(name)),None)
+     if manager is None:raise RuntimeError('Пакетный менеджер не распознан. Установите компоненты из README вручную.')
+@@ -37,6 +42,10 @@ def command(mode,missing=None):
+     return ['sudo',manager,*flags,*packages]
+ 
+ def install(mode,missing=None):
++    if sys.platform=='darwin':
++        from .mac_browser import browser
++        if browser() is not None:return
++        raise RuntimeError('Установите Google Chrome: brew install --cask google-chrome (или Microsoft Edge / Chromium)')
+     if sys.platform=='win32':
+         from .windows import missing as windows_missing
+         problems=windows_missing()
+diff --git a/alisa_cli/doctor.py b/alisa_cli/doctor.py
+index ec8772f..d4f3a60 100644
+--- a/alisa_cli/doctor.py
++++ b/alisa_cli/doctor.py
+@@ -11,7 +11,7 @@ def windows_chromium():
+ 
+ def inspect(config):
+     s=Station(config)
+-    script='id -u; uname -m; cat /proc/device-tree/compatible; printf "\\n"; sha256sum /system/vendor/quasar/maind /system/vendor/quasar/libs/libyandex_evil.so; df -Pk /data; for x in aplay base64 sha256sum ip; do command -v "$x" || true; done; command -v socat || command -v /data/opt/entware/bin/socat || true; printf "ALISA_FIRMWARE_VERSION="; head -c 256 /system/vendor/quasar/version_full 2>/dev/null || true'
++    script='id -u; uname -m; cat /proc/device-tree/compatible; printf "\\n"; sha256sum /system/vendor/quasar/maind /system/vendor/quasar/libs/libyandex_evil.so; df -Pk /data; for x in aplay base64 sha256sum ip; do command -v "$x" || true; done; command -v socat || command -v /data/opt/entware/bin/socat || true; printf "ALISA_FIRMWARE_VERSION="; head -c 256 /system/vendor/quasar/version_full 2>/dev/null || true; if [ -d /data/opt/quasar-bridge ]; then printf "\\nALISA_QUASAR_BRIDGE=1"; fi'
+     native=config['mode']=='native'
+     if native:
+         session=f'{NATIVE}/state/web-session.json'
+@@ -29,6 +29,11 @@ def inspect(config):
+     if sys.platform=='win32':
+         from .windows import missing as windows_missing
+         missing=windows_missing()
++    elif sys.platform=='darwin':
++        missing=['ssh'] if not shutil.which('ssh') else []
++        if not saved_login:
++            from .mac_browser import browser as mac_browser
++            if mac_browser() is None:missing.append('Chrome, Edge или Chromium')
+     else:
+         missing=['ssh'] if not shutil.which('ssh') else []
+         if not saved_login:
+@@ -37,7 +42,7 @@ def inspect(config):
+     if not native:
+         for tool in ['pactl','pacat','paplay']:
+             if not shutil.which(tool):missing.append(tool)
+-        if sys.platform!='linux':missing.append('Windows audio backend (следующий этап)')
++        if sys.platform!='linux':missing.append('браузерный мост доступен только в Linux')
+         if not missing:
+             if subprocess.run(['pactl','info'],capture_output=True).returncode:missing.append('работающий PipeWire/PulseAudio')
+     available=None
+@@ -52,6 +57,7 @@ def inspect(config):
+     return {'ssh':True,'root':root,'plum':compatible,'mode_supported':mode_supported,**firmware,'architecture':lines[1].strip(),
+         'firmware_version':version or None,'firmware_sha256':{'maind':pair[0],'vqe':pair[1]},
+         **({'login_saved':saved_login} if native else {}),
++        'quasar_bridge':'ALISA_QUASAR_BRIDGE=1' in lines,
+         'free_data_kib':available,'host_missing':missing,'station_missing':missing_remote,
+         'ok':root and compatible and mode_supported and firmware['firmware_files_present'] and lines[1].strip() in ARCHITECTURES and available is not None and available>12000 and not missing and not missing_remote}
+ 
+diff --git a/alisa_cli/login_browser.py b/alisa_cli/login_browser.py
+index 7f5fb51..e9bfb56 100644
+--- a/alisa_cli/login_browser.py
++++ b/alisa_cli/login_browser.py
+@@ -33,6 +33,9 @@ def browser_page_ready(profile,after=None):
+     if sys.platform=='win32':
+         from .win_browser import page_ready
+         return page_ready(profile)
++    if sys.platform=='darwin':
++        from .mac_browser import page_ready as mac_page_ready
++        return mac_page_ready(profile)
+     pid=profile_pid(profile)
+     if pid is None:return False
+     try:
+@@ -100,6 +103,9 @@ def profile_pid(profile):
+     if sys.platform=='win32':
+         from .win_browser import profile_pid as windows_pid
+         return windows_pid(profile)
++    if sys.platform=='darwin':
++        from .mac_browser import profile_pid as mac_pid
++        return mac_pid(profile)
+     profile=Path(profile).resolve();lock=profile/'SingletonLock'
+     try:
+         pid=int(os.readlink(lock).rsplit('-',1)[1])
+@@ -115,6 +121,9 @@ def close_profile(profile):
+     if sys.platform=='win32':
+         from .win_browser import close_profile as close
+         return close(profile)
++    if sys.platform=='darwin':
++        from .mac_browser import close_profile as close
++        return close(profile)
+     pid=profile_pid(profile)
+     if pid is None:return
+     try:os.kill(pid,signal.SIGTERM)
+@@ -128,6 +137,9 @@ def open_window(profile,proxy=None):
+     if sys.platform=='win32':
+         from .win_browser import open_window as open_browser
+         return open_browser(profile,proxy)
++    if sys.platform=='darwin':
++        from .mac_browser import open_window as open_browser
++        return open_browser(profile,proxy)
+     profile=Path(profile).resolve()
+     if not os.environ.get('DISPLAY'):raise RuntimeError('Для входа нужен рабочий стол Linux')
+     chromium=shutil.which('chromium')
+diff --git a/alisa_cli/mac_browser.py b/alisa_cli/mac_browser.py
+new file mode 100644
+index 0000000..8cfc081
+--- /dev/null
++++ b/alisa_cli/mac_browser.py
+@@ -0,0 +1,122 @@
++"""macOS sign-in window and dedicated-profile process control.
++
++Chrome, Edge and Chromium keep one profile per user-data directory. The
++profile lock is not portable enough here, so the owning process is found by
++its exact ``--user-data-dir`` argument in ``ps``. Helper processes carry
++``--type=`` and are never treated as the window owner.
++"""
++import os,re,shutil,signal,subprocess,time
++from pathlib import Path
++
++APPLICATIONS = (
++    ('Google Chrome', 'Google Chrome'),
++    ('Microsoft Edge', 'Microsoft Edge'),
++    ('Chromium', 'Chromium'),
++)
++BUNDLE_NAMES = ('Google Chrome', 'Microsoft Edge', 'Chromium', 'chrome', 'chromium', 'msedge')
++
++
++def browser():
++    """Return the first usable Chromium-based browser executable."""
++    override = os.environ.get('ALISA_BROWSER')
++    candidates = [Path(override).expanduser()] if override else []
++    for bundle, binary in APPLICATIONS:
++        suffix = Path(bundle + '.app/Contents/MacOS/' + binary)
++        candidates += [Path('/Applications')/suffix, Path.home()/'Applications'/suffix]
++    for name in ('chromium', 'google-chrome', 'google-chrome-stable', 'microsoft-edge', 'chrome'):
++        found = shutil.which(name)
++        if found:
++            candidates.append(Path(found))
++    return next((path for path in candidates if path.is_file() and os.access(path, os.X_OK)), None)
++
++
++def _browser_executable(command):
++    executable = command.split(' --', 1)[0]
++    name = Path(executable).name
++    return name in BUNDLE_NAMES or any(part in executable for part in ('Google Chrome', 'Chromium', 'Microsoft Edge'))
++
++
++def profile_pid(profile):
++    """PID of the browser window that owns exactly this profile, or None."""
++    profile = Path(profile).resolve()
++    marker = '--user-data-dir=' + str(profile)
++    try:
++        output = subprocess.run(['ps', '-axo', 'pid=,command='], capture_output=True, timeout=10).stdout
++    except (OSError, subprocess.SubprocessError):
++        return None
++    for line in output.decode(errors='replace').splitlines():
++        line = line.strip()
++        if not line:
++            continue
++        pid_text, _, command = line.partition(' ')
++        command = command.strip()
++        if not pid_text.isdecimal() or '--type=' in command:
++            continue
++        if not re.search(r'(?:^|\s)' + re.escape(marker) + r'(?=\s|$)', command):
++            continue
++        if _browser_executable(command):
++            return int(pid_text)
++    return None
++
++
++def page_ready(profile):
++    """Best-effort title check; native sign-in does not depend on it."""
++    pid = profile_pid(profile)
++    if pid is None:
++        return False
++    script = ('tell application "System Events" to get name of every window of '
++              '(first process whose unix id is %d)' % pid)
++    try:
++        result = subprocess.run(['osascript', '-e', script], capture_output=True, timeout=5)
++    except (OSError, subprocess.SubprocessError):
++        return False
++    if result.returncode:
++        return False
++    from .login_browser import login_title_ready
++    return any(login_title_ready(title) for title in result.stdout.decode(errors='replace').split(', '))
++
++
++def open_window(profile, proxy=None):
++    profile = Path(profile).resolve()
++    existing = profile_pid(profile)
++    if existing is not None:
++        return existing
++    executable = browser()
++    if executable is None:
++        raise RuntimeError('Установите Google Chrome, Microsoft Edge или Chromium: brew install --cask google-chrome')
++    profile.mkdir(parents=True, exist_ok=True, mode=0o700)
++    profile.chmod(0o700)
++    args = [str(executable), '--user-data-dir=' + str(profile), '--no-first-run',
++            '--no-default-browser-check', '--disable-background-mode', '--disable-extensions',
++            '--disable-sync', '--new-window']
++    if proxy:
++        args.append('--proxy-server=' + proxy)
++    process = subprocess.Popen(args + ['https://chatgpt.com/auth/login'], stdin=subprocess.DEVNULL,
++                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
++    time.sleep(.3)
++    if process.poll() is not None and profile_pid(profile) is None:
++        raise RuntimeError('Окно входа не открылось. Проверьте, не занят ли отдельный профиль браузера.')
++    return process.pid
++
++
++def close_profile(profile):
++    pid = profile_pid(profile)
++    if pid is None:
++        return
++    try:
++        os.kill(pid, signal.SIGTERM)
++    except ProcessLookupError:
++        return
++    for _ in range(80):
++        if profile_pid(profile) is None:
++            return
++        time.sleep(.1)
++    try:
++        os.kill(pid, signal.SIGKILL)
++    except ProcessLookupError:
++        return
++    for _ in range(40):
++        if profile_pid(profile) is None:
++            return
++        time.sleep(.1)
++    raise RuntimeError('Окно входа ещё закрывается. Дождитесь его закрытия и повторите вход; профиль сохранён.')
+diff --git a/alisa_cli/runtime.py b/alisa_cli/runtime.py
+index b051591..2dd93ab 100644
+--- a/alisa_cli/runtime.py
++++ b/alisa_cli/runtime.py
+@@ -42,7 +42,7 @@ def status(config):
+             check_result(r)
+             if not isinstance(result.get('phase'),str):raise PublicError('station_reply_invalid')
+         return {'mode':'native',**result}
+-    if sys.platform!='linux':return {'mode':'bridge','phase':'unsupported','error':'Windows ещё не проверена'}
++    if sys.platform!='linux':return {'mode':'bridge','phase':'unsupported','error':'Браузерный мост доступен только в Linux'}
+     r=bridge_command(config,'status')
+     try:result=json.loads(r.stdout)
+     except ValueError:result={'phase':'stopped'}
+@@ -175,7 +175,7 @@ def start(config,foreground=False):
+             if result.get('agent_connected'):return result
+             time.sleep(.5)
+         raise RuntimeError('Нативный режим не запустился; штатная Алиса должна восстановиться автоматически')
+-    if sys.platform!='linux':raise RuntimeError('Браузерный мост Windows — следующий этап, текущая версия работает в Linux')
++    if sys.platform!='linux':raise RuntimeError('Браузерный мост доступен только в Linux')
+     if s.run('test -f /tmp/alisa-standalone/monitor.pid',check=False).returncode==0:
+         raise RuntimeError('Сначала остановите нативный режим: alisa native stop')
+     apply_settings(config);env,host=bridge_env(config)
+diff --git a/alisa_cli/ssh_setup.py b/alisa_cli/ssh_setup.py
+index 2cffc28..7adc0e8 100644
+--- a/alisa_cli/ssh_setup.py
++++ b/alisa_cli/ssh_setup.py
+@@ -75,7 +75,7 @@ def trust_host(config,confirm):
+ def password_channel(password):
+     """OpenSSH askpass helper retrieves the password over a private socket."""
+     if not password or '\n' in password or '\r' in password or '\x00' in password:raise ValueError('Некорректный пароль SSH')
+-    if sys.platform!='linux':raise RuntimeError('Вход по паролю в этой сборке проверяется на Linux')
++    if sys.platform not in ('linux','darwin'):raise RuntimeError('Вход по паролю в этой сборке проверяется на Linux и macOS')
+     with tempfile.TemporaryDirectory(prefix='alisa-ssh-') as folder:
+         path=Path(folder)/'askpass.sock';helper=Path(folder)/'askpass'
+         code="import os,socket; s=socket.socket(socket.AF_UNIX); s.connect(os.environ['ALISA_ASKPASS_SOCKET']); s.sendall(b'password\\n'); data=b''\nwhile not data.endswith(b'\\n'):\n chunk=s.recv(65536)\n if not chunk: raise SystemExit(1)\n data+=chunk\nos.write(1,data); s.close()"
+diff --git a/alisa_cli/updates.py b/alisa_cli/updates.py
+index a2313f5..e4f9d57 100644
+--- a/alisa_cli/updates.py
++++ b/alisa_cli/updates.py
+@@ -38,6 +38,8 @@ class UpdateScheduled(Exception):
+ 
+ def target_platform():
+     machine = platform.machine().lower()
++    if sys.platform == 'darwin':
++        raise RuntimeError('Обновление macOS-сборки: перезапустите bootstrap-macos.sh. Обновление на месте заменило бы darwin-патч.')
+     if sys.platform == 'win32' and machine in ('amd64', 'x86_64'):
+         return 'windows-amd64'
+     if sys.platform == 'linux' and machine in ('x86_64', 'amd64'):
+@@ -211,7 +213,7 @@ def installed_root(target):
+ def mode_plan():
+     from . import runtime
+     plans = []
+-    modes=('native',) if os.environ.get('ALISA_NATIVE_DEVICE') is not None else ('native','bridge')
++    modes=('native',) if sys.platform == 'darwin' or os.environ.get('ALISA_NATIVE_DEVICE') is not None else ('native','bridge')
+     for mode in modes:
+         if mode == 'bridge' and sys.platform == 'win32':
+             continue
+diff --git a/alisa_cli/vpn.py b/alisa_cli/vpn.py
+index 6c4a299..7e95afe 100644
+--- a/alisa_cli/vpn.py
++++ b/alisa_cli/vpn.py
+@@ -36,11 +36,11 @@ def configure(config,source,index=None,client='standard',selection=None):
+     if engine=='xray':
+         spec=__import__('importlib.util',fromlist=['spec_from_file_location'])
+         definition=spec.spec_from_file_location('fetch_xray',ROOT/'scripts/fetch_xray.py');module=spec.module_from_spec(definition);definition.loader.exec_module(module)
+-        if sys.platform!='win32':module.fetch('linux-amd64')
++        if sys.platform=='linux':module.fetch('linux-amd64')
+         module.fetch('linux-armv7')
+-    core=ROOT/'assets/vpn'/('windows-amd64' if sys.platform=='win32' else 'linux-amd64')/(engine+'.exe' if sys.platform=='win32' else engine)
++    core=(ROOT/'assets/vpn'/('windows-amd64' if sys.platform=='win32' else 'linux-amd64')/(engine+'.exe' if sys.platform=='win32' else engine)) if sys.platform!='darwin' else None
+     if sys.platform=='win32' and not core.exists():raise RuntimeError('Windows-пакет VPN неполный. Повторите установку CLI.')
+-    if core.exists():
++    if core is not None and core.exists():
+         with tempfile.TemporaryDirectory(prefix='alisa-vless-') as folder:
+             candidate=__import__('pathlib').Path(folder)/'config.json';write_private(candidate,value)
+             check=subprocess.run([str(core),*(['run','-test'] if engine=='xray' else ['check']),'-c',str(candidate)],capture_output=True)
+diff --git a/engines/native/tools/import_web_session.py b/engines/native/tools/import_web_session.py
+index 66321d8..7f75084 100644
+--- a/engines/native/tools/import_web_session.py
++++ b/engines/native/tools/import_web_session.py
+@@ -26,45 +26,58 @@ async def main(profile, destination, interactive=False, install=False, login_onl
+     # Avoid taking over a running user call or its profile lock, including
+     # Chromium builds which flatten all argv into a single process title.
+     sys.path.insert(0,str(Path(__file__).resolve().parents[3]))
+-    from alisa_cli.login_browser import profile_pid
++    if sys.platform=='darwin':
++        from alisa_cli.mac_browser import browser as find_browser,profile_pid
++        found=find_browser()
++        chromium=str(found) if found else None
++        if not chromium:raise RuntimeError('Для одноразового импорта нужен Google Chrome, Microsoft Edge или Chromium')
++    else:
++        from alisa_cli.login_browser import profile_pid
++        chromium=shutil.which('chromium')
++        if not chromium:
++            raise RuntimeError('Chromium is needed only for this one-time import')
+     if profile_pid(profile) is not None:raise RuntimeError('Selected dedicated browser profile is in use')
+-    for entry in Path('/proc').iterdir():
+-        if not entry.name.isdigit():
+-            continue
+-        try:
+-            args=(entry/'cmdline').read_bytes().split(b'\0')
+-        except OSError:
+-            continue
+-        if (f'--user-data-dir={profile}'.encode() in args and
+-                any(b'chromium' in x for x in args[:1])):
+-            raise RuntimeError('Selected dedicated browser profile is in use')
+-    chromium=shutil.which('chromium')
+-    if not chromium:
+-        raise RuntimeError('Chromium is needed only for this one-time import')
++    if sys.platform!='darwin':
++        for entry in Path('/proc').iterdir():
++            if not entry.name.isdigit():
++                continue
++            try:
++                args=(entry/'cmdline').read_bytes().split(b'\0')
++            except OSError:
++                continue
++            if (f'--user-data-dir={profile}'.encode() in args and
++                    any(b'chromium' in x for x in args[:1])):
++                raise RuntimeError('Selected dedicated browser profile is in use')
+     screen=None;temp=None
+     if interactive:
+-        if not os.environ.get('DISPLAY'):raise RuntimeError('Visible login requires the user desktop')
+         profile.mkdir(parents=True,exist_ok=True,mode=0o700);profile.chmod(0o700)
+-        env={**os.environ,'XDG_SESSION_TYPE':'x11'}
++        env={**os.environ}
++        if sys.platform!='darwin':
++            if not os.environ.get('DISPLAY'):raise RuntimeError('Visible login requires the user desktop')
++            env['XDG_SESSION_TYPE']='x11'
+     else:
+-        xvfb=shutil.which('Xvfb') or str(Path(__file__).resolve().parents[2]/'bridge/display-tools/usr/bin/Xvfb')
+-        if not Path(xvfb).exists():
+-            raise RuntimeError('Xvfb is needed only for the hidden import window')
+-        temp=tempfile.TemporaryDirectory(prefix='standalone-auth-')
+-        authority=Path(temp.name)/'Xauthority'
+-        authority.touch(mode=0o600)
+-        number=next(n for n in range(191,221) if not Path(f'/tmp/.X{n}-lock').exists())
+-        display=f':{number}'
+-        subprocess.run(['xauth','-f',str(authority)],input=f'add {display} . {secrets.token_hex(16)}\n'.encode(),
+-                       stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True)
+-        screen=await asyncio.create_subprocess_exec(xvfb,display,'-screen','0','1100x850x24',
+-                 '-nolisten','tcp','-auth',str(authority),'-noreset',stdout=asyncio.subprocess.DEVNULL,
+-                 stderr=asyncio.subprocess.DEVNULL)
+-        for _ in range(40):
+-            if Path(f'/tmp/.X11-unix/X{number}').exists():break
+-            await asyncio.sleep(.1)
+-        env={**os.environ,'DISPLAY':display,'XAUTHORITY':str(authority),'XDG_SESSION_TYPE':'x11'}
++        if sys.platform=='darwin':
++            env={**os.environ}
++        else:
++            xvfb=shutil.which('Xvfb') or str(Path(__file__).resolve().parents[2]/'bridge/display-tools/usr/bin/Xvfb')
++            if not Path(xvfb).exists():
++                raise RuntimeError('Xvfb is needed only for the hidden import window')
++            temp=tempfile.TemporaryDirectory(prefix='standalone-auth-')
++            authority=Path(temp.name)/'Xauthority'
++            authority.touch(mode=0o600)
++            number=next(n for n in range(191,221) if not Path(f'/tmp/.X{n}-lock').exists())
++            display=f':{number}'
++            subprocess.run(['xauth','-f',str(authority)],input=f'add {display} . {secrets.token_hex(16)}\n'.encode(),
++                           stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True)
++            screen=await asyncio.create_subprocess_exec(xvfb,display,'-screen','0','1100x850x24',
++                     '-nolisten','tcp','-auth',str(authority),'-noreset',stdout=asyncio.subprocess.DEVNULL,
++                     stderr=asyncio.subprocess.DEVNULL)
++            for _ in range(40):
++                if Path(f'/tmp/.X11-unix/X{number}').exists():break
++                await asyncio.sleep(.1)
++            env={**os.environ,'DISPLAY':display,'XAUTHORITY':str(authority),'XDG_SESSION_TYPE':'x11'}
+     env.pop('WAYLAND_DISPLAY',None)
++    platform_args=['--headless=new'] if sys.platform=='darwin' and not interactive else ([] if sys.platform=='darwin' else ['--ozone-platform=x11'])
+     child_read,parent_write=os.pipe()
+     parent_read,child_write=os.pipe()
+     wrapper=('import os,sys; a=int(sys.argv[1]); b=int(sys.argv[2]); '
+@@ -73,7 +86,7 @@ async def main(profile, destination, interactive=False, install=False, login_onl
+              'os.execv(sys.argv[3],sys.argv[3:])')
+     proc=await asyncio.create_subprocess_exec(
+         sys.executable,'-c',wrapper,str(child_read),str(child_write),chromium,
+-        f'--user-data-dir={profile}','--ozone-platform=x11','--remote-debugging-pipe',
++        f'--user-data-dir={profile}',*platform_args,'--remote-debugging-pipe',
+         '--no-first-run','--no-default-browser-check',*(['--proxy-server='+proxy] if proxy else []),'https://chatgpt.com/',
+         pass_fds=(child_read,child_write),stdin=asyncio.subprocess.DEVNULL,
+         stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL,
+@@ -129,14 +142,18 @@ async def main(profile, destination, interactive=False, install=False, login_onl
+         if not data or not data.get('accessToken'):
+             raise RuntimeError('Existing web login is not usable; owner sign-in is required')
+         cookies=(await command('Network.getCookies',{'urls':['https://chatgpt.com/']},session)).get('cookies',[])
+-        allowed=[c for c in cookies if c['name'].startswith(
+-            ('__Secure-next-auth.session-token','__Secure-authjs.session-token')) or
+-            c['name'] in ('oai-did','cf_clearance')]
+-        if not any('session-token' in c['name'] for c in allowed):
++        if sys.platform=='darwin':
++            from alisa_cli.win_browser import session_cookies
++            allowed=session_cookies(cookies)
++        else:
++            allowed={c['name']:c['value'] for c in cookies if c['name'].startswith(
++                ('__Secure-next-auth.session-token','__Secure-authjs.session-token')) or
++                c['name'] in ('oai-did','cf_clearance')}
++        if not any('session-token' in name for name in allowed):
+             raise RuntimeError('No renewable web-session cookie was available')
+         payload={'access_token':data['accessToken'],'expires':data.get('expires'),
+                  'account_id':(data.get('account') or {}).get('id'),
+-                 'cookies':{c['name']:c['value'] for c in allowed},
++                 'cookies':allowed,
+                  'user_agent':(await command('Runtime.evaluate',{'expression':'navigator.userAgent',
+                               'returnByValue':True},session)).get('result',{}).get('value')}
+         destination.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+diff --git a/scripts/release.py b/scripts/release.py
+index 13937c7..49ad092 100644
+--- a/scripts/release.py
++++ b/scripts/release.py
+@@ -51,7 +51,23 @@ def install(record_path=None):
+             record=app_install.replace(staged,destination,'linux-x86_64',record_path=record_path)
+     launcher.parent.mkdir(parents=True,exist_ok=True)
+     import shlex
+-    launcher.write_text('#!/bin/sh\nexec python3 '+shlex.quote(str(destination/'alisa.py'))+' "$@"\n');launcher.chmod(0o755)
++    if sys.platform=='darwin':
++        candidates=[]
++        for value in (sys.executable,shutil.which('python3'),'/opt/homebrew/bin/python3','/usr/local/bin/python3','/usr/bin/python3'):
++            if value and value not in candidates:candidates.append(value)
++        quoted=' '.join(shlex.quote(value) for value in candidates)
++        launcher.write_text(
++            '#!/bin/sh\n'
++            'for PY in '+quoted+'; do\n'
++            '  [ -x "$PY" ] || continue\n'
++            "  \"$PY\" -c 'import sys;raise SystemExit(0 if sys.version_info>=(3,10) else 1)' 2>/dev/null || continue\n"
++            '  exec "$PY" '+shlex.quote(str(destination/'alisa.py'))+' "$@"\n'
++            'done\n'
++            "echo 'Нужен Python 3.10+. Установите: brew install python' >&2\n"
++            'exit 1\n')
++    else:
++        launcher.write_text('#!/bin/sh\nexec python3 '+shlex.quote(str(destination/'alisa.py'))+' "$@"\n')
++    launcher.chmod(0o755)
+     print('Установлено. Запуск:',launcher)
+     print('Настройки и аккаунты хранятся отдельно в ~/.local/state/alisa-voice.')
+     return record

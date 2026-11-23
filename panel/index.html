@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Cache-Control" content="no-store">
+<title>Alisa Panel</title>
+<style>
+:root{--bg:#0d1420;--panel:#162131;--panel2:#1d2a3d;--line:#2b3a52;--text:#e8eefb;--muted:#9fb0c9;--accent:#4da3ff;--ok:#3ddc97;--warn:#ffc857;--bad:#ff6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:18px 20px 8px;max-width:1080px;margin:0 auto}
+h1{font-size:22px;margin:0;letter-spacing:.3px}
+header .meta{color:var(--muted);font-size:12.5px}
+nav{display:flex;gap:6px;flex-wrap:wrap;padding:6px 20px 0;max-width:1080px;margin:0 auto}
+nav button{background:transparent;border:1px solid transparent;color:var(--muted);padding:8px 13px;border-radius:9px;cursor:pointer;font:inherit}
+nav button.active{background:var(--panel);border-color:var(--line);color:var(--text)}
+main{max-width:1080px;margin:0 auto;padding:14px 20px 60px}
+section.tab{display:none}section.tab.active{display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.6px}
+.card .value{font-size:18px;margin-top:4px;display:flex;align-items:center;gap:8px}
+.card small{color:var(--muted);display:block;margin-top:4px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block;flex:none}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}
+.box h2{font-size:15px;margin:0 0 10px;letter-spacing:.2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button.btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 13px;font:inherit;cursor:pointer}
+button.btn:hover{border-color:#3d5375}
+button.btn.primary{background:#1f5fbe;border-color:#2f74d8}
+button.btn.danger{background:#5a2430;border-color:#8a3547}
+button.btn:disabled{opacity:.45;cursor:default}
+select,input,textarea{background:#0f1826;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:9px;font:inherit;max-width:100%}
+select,input{min-width:0;width:100%}
+input[type="checkbox"]{width:16px;height:16px;padding:0;margin:0;border:0;background:transparent;accent-color:var(--accent)}
+.grid2>div,.grid4>div{min-width:0}
+label{display:block;color:var(--muted);font-size:12.5px;margin:9px 0 4px}
+textarea{width:100%;min-height:300px;font:12.5px/1.4 ui-monospace,Menlo,Consolas,monospace;white-space:pre;tab-size:2}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.warn{border:1px solid #6b5320;background:#2a2414;color:#ffd77a;border-radius:12px;padding:12px 14px;margin:10px 0}
+.bad{border:1px solid #6b2530;background:#2a151a;color:#ffb3b3;border-radius:12px;padding:12px 14px;margin:10px 0}
+.oknote{border:1px solid #1f5a45;background:#12281f;color:#a8f0cf;border-radius:12px;padding:12px 14px;margin:10px 0}
+.hidden{display:none!important}
+pre{background:#0a111c;border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;max-height:420px;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;color:#cfe0f7;margin:0}
+.log{border:1px solid var(--line);border-radius:10px;padding:4px 12px;max-height:540px;overflow:auto;background:#0a111c;font:12.5px/1.45 ui-monospace,Menlo,Consolas,monospace}
+.logmeta{color:var(--muted);font:12px system-ui;padding:8px 0;border-bottom:1px solid var(--line)}
+.logrow{display:grid;grid-template-columns:62px 58px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid #1c2838;align-items:start}
+.logrow:last-child{border-bottom:0}
+.logtime{color:var(--muted)}
+.loglvl{font-size:11px;letter-spacing:.4px}
+.loglvl.info{color:var(--accent)}
+.loglvl.warn{color:var(--warn)}
+.loglvl.error{color:var(--bad)}
+.loglvl.debug{color:var(--muted)}
+.logmsg{white-space:pre-wrap;word-break:break-word;min-width:0}
+.logdetail{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
+.logrow details{grid-column:1/-1}
+.logrow details pre{max-height:220px;white-space:pre-wrap}
+.muted{color:var(--muted)}
+.small{font-size:12.5px}
+table{width:100%;border-collapse:collapse;margin:8px 0}
+td,th{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12.5px}
+kbd{background:#0f1826;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font:12px ui-monospace}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#203247;border:1px solid #3b5478;color:var(--text);padding:11px 16px;border-radius:12px;max-width:90%;box-shadow:0 8px 30px #0008;opacity:0;transition:.2s;pointer-events:none;z-index:20}
+#toast.show{opacity:1}
+@media(max-width:640px){header{padding-top:14px}.grid2{grid-template-columns:1fr}main{padding:10px 12px 50px}nav{padding:4px 12px 0}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Alisa Panel</h1>
+  <div class="meta" id="stationMeta">…</div>
+</header>
+<nav>
+  <button data-tab="overview" class="active">Обзор</button>
+  <button data-tab="gpt">ChatGPT</button>
+  <button data-tab="bridge">Quasar Bridge</button>
+  <button data-tab="help">Справка</button>
+  <button data-tab="service">Обслуживание</button>
+</nav>
+<main>
+  <div id="warnings"></div>
+
+  <section class="tab active" id="tab-overview">
+    <div class="cards">
+      <div class="card"><div class="label">Quasar Bridge</div><div class="value"><span class="dot" id="bridgeDot"></span><span id="bridgeState">…</span></div><small id="bridgeSub"></small></div>
+      <div class="card"><div class="label">ChatGPT Voice</div><div class="value"><span class="dot" id="gptDot"></span><span id="gptState">…</span></div><small id="gptSub"></small></div>
+      <div class="card"><div class="label">VLESS</div><div class="value"><span class="dot" id="vpnDot"></span><span id="vpnState">…</span></div><small id="vpnSub"></small></div>
+      <div class="card"><div class="label">Станция</div><div class="value" id="stationName">…</div><small id="stationSub"></small></div>
+    </div>
+
+    <div class="box">
+      <h2>Разговор с ChatGPT</h2>
+      <div class="row">
+        <button class="btn primary" onclick="act('gpt_open')">Открыть чат</button>
+        <button class="btn" onclick="act('gpt_new')">Новый чат</button>
+        <button class="btn" onclick="act('gpt_previous')">Предыдущий</button>
+        <button class="btn danger" onclick="confirmAct('gpt_close','Вернуть штатную Алису?')">Вернуться к Алисе</button>
+      </div>
+      <p class="muted small">Команды голосом: «Алиса, открой чат», «Алиса, создай новый чат», «Алиса, закрой чат».</p>
+    </div>
+
+    <div class="box">
+      <h2>Режимы</h2>
+      <div class="row">
+        <button class="btn" onclick="act('gpt_start')">Запустить GPT</button>
+        <button class="btn" onclick="act('gpt_restart')">Перезапустить GPT</button>
+        <button class="btn" onclick="confirmAct('gpt_stop','Остановить GPT и вернуть Алису?')">Остановить GPT</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="act('bridge_start')">Запустить Bridge</button>
+        <button class="btn" onclick="confirmAct('bridge_restart','Перезапустить Quasar Bridge? Голос на несколько секунд прервётся.')">Перезапустить Bridge</button>
+        <button class="btn danger" onclick="confirmAct('bridge_stop','Остановить Bridge? Пока он выключен, Алиса не сможет отвечать и понимать команды.')">Остановить Bridge</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-gpt">
+    <div class="box">
+      <h2>Разговор</h2>
+      <label for="chat">Выбранный разговор</label>
+      <div class="row">
+        <select id="chat" style="flex:1;min-width:220px"></select>
+        <button class="btn" onclick="act('gpt_select',{chat_id:val('chat')})">Открыть выбранный</button>
+      </div>
+      <p class="muted small">Список и названия приходят от клиента. Переименовать можно на <a href="#" id="nativeLink" target="_blank" style="color:var(--accent)">странице клиента</a>.</p>
+    </div>
+
+    <div class="box">
+      <h2>Голос и подсветка</h2>
+      <div class="grid4">
+        <div><label for="voice">Голос ChatGPT</label><select id="voice"></select></div>
+        <div><label for="ledStyle">Подсветка</label><select id="ledStyle"></select></div>
+        <div><label for="ledScope">Когда светится</label><select id="ledScope"><option value="speaking">Только во время ответа</option><option value="active">Ответ и прослушивание</option></select></div>
+        <div><label for="listenLed">Подсветка в паузах</label><select id="listenLed"><option value="0">Выключена</option><option value="1">Включена</option></select></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="btn primary" onclick="saveGptLook()">Сохранить</button></div>
+    </div>
+
+    <div class="box">
+      <h2>Фразы после «Алиса»</h2>
+      <div class="grid2">
+        <div><label for="pOpen">Открыть чат</label><input id="pOpen" maxlength="200"></div>
+        <div><label for="pNew">Новый чат</label><input id="pNew" maxlength="200"></div>
+        <div><label for="pClose">Закрыть чат</label><input id="pClose" maxlength="200"></div>
+        <div><label for="pPrevious">Предыдущий чат</label><input id="pPrevious" maxlength="200"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" onclick="savePhrases()">Сохранить фразы</button>
+        <button class="btn" onclick="loadPhrases()">Вернуть текущие</button>
+      </div>
+      <p class="muted small">Фразы нормализуются: нижний регистр, без знаков, «алиса» и «пожалуйста» отбрасываются.</p>
+    </div>
+
+    <div class="box">
+      <h2>Автозапуск и сеть</h2>
+      <div class="grid4">
+        <div><label for="autoGpt">GPT при включении</label><select id="autoGpt"><option value="0">Выключен</option><option value="1">Включён</option></select></div>
+        <div><label for="autoVpn">VLESS при включении</label><select id="autoVpn"><option value="0">Выключен</option><option value="1">Включён</option></select></div>
+        <div><label for="stun">STUN</label><select id="stun"><option value="1">Включён</option><option value="0">Выключен (обход ICE-таймаута)</option></select></div>
+        <div><label for="vpnOp">VLESS сейчас</label><div class="row"><button class="btn" onclick="confirmAct('gpt_vpn','Запустить VLESS и переключить GPT на туннель? GPT будет перезапущен.',{op:'start'})">Запустить</button><button class="btn" onclick="confirmAct('gpt_vpn','Остановить VLESS и вернуть GPT прямое подключение? Текущий разговор прервётся.',{op:'stop'})">Остановить</button></div></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="btn primary" onclick="saveGptNetwork()">Сохранить</button></div>
+      <p class="muted small">STUN меняется с перезапуском GPT. VLESS направляет только трафик GPT; при включённом VLESS прямое подключение запрещено.</p>
+      <p class="muted small" id="autoNote"></p>
+    </div>
+
+    <div class="box">
+      <h2>Журнал GPT</h2>
+      <div class="row" style="margin-bottom:8px"><button class="btn" onclick="loadLog('gpt_logs','gptLog')">Обновить</button></div>
+      <pre id="gptLog" class="muted">Нажмите «Обновить».</pre>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-bridge">
+    <div class="box">
+      <h2>Состояние</h2>
+      <div class="cards">
+        <div class="card"><div class="label">Процесс</div><div class="value" id="bridgeProc">…</div><small id="bridgeVer"></small></div>
+        <div class="card"><div class="label">Health</div><div class="value" id="bridgeHealth">…</div><small>127.0.0.1:8443/healthz</small></div>
+        <div class="card"><div class="label">Endpoint</div><div class="value" id="bridgeEndpoint">…</div><small>quasar.cfg</small></div>
+      </div>
+      <div class="row">
+        <button class="btn" onclick="act('bridge_start')">Запустить</button>
+        <button class="btn" onclick="confirmAct('bridge_restart','Перезапустить Bridge?')">Перезапустить</button>
+        <button class="btn danger" onclick="confirmAct('bridge_stop','Остановить Bridge? Алиса перестанет отвечать.')">Остановить</button>
+        <button class="btn" onclick="act('bridge_check')">Проверить конфиг</button>
+        <button class="btn" onclick="act('bridge_check_backends')">Проверить LLM и HA</button>
+      </div>
+    </div>
+
+    <div class="box">
+      <h2>Подключение к LLM и Home Assistant</h2>
+      <p class="muted small">Пишется в <kbd>runtime.env</kbd> и имеет приоритет над <kbd>config.json</kbd>. Ключ видит владелец пароля панели.</p>
+      <div class="grid4">
+        <div><label for="bMode">Режим</label><select id="bMode"><option value="hybrid">hybrid — LLM и HA</option><option value="native">native</option><option value="observe">observe — только наблюдение</option></select></div>
+        <div><label for="bBase">Адрес API (с /v1)</label><input id="bBase" placeholder="https://llm.example/v1"></div>
+        <div><label for="bModel">Модель</label>
+          <div class="row" style="gap:6px;flex-wrap:nowrap">
+            <input id="bModel" list="modelList" placeholder="gpt-4.1-mini" style="flex:1;min-width:110px">
+            <button class="btn" onclick="loadModels()" title="Загрузить список моделей">↻</button>
+          </div>
+          <datalist id="modelList"></datalist>
+        </div>
+        <div><label for="bApi">Тип API</label><select id="bApi"><option value="chat_completions">Chat Completions</option><option value="responses">Responses</option><option value="chatgpt">chatgpt</option></select></div>
+        <div><label for="bKey">Ключ API</label><input id="bKey" type="password" autocomplete="off" placeholder="если нужен"></div>
+        <div><label for="bHome">Home Assistant MCP URL</label><input id="bHome" placeholder="https://ha.example/mcp"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" onclick="loadBridgeEnv()">Загрузить</button>
+        <button class="btn primary" onclick="saveBridgeEnv()">Сохранить и перезапустить</button>
+        <label class="small muted" style="display:flex;align-items:center;gap:6px;margin:0;white-space:nowrap;flex:none"><input type="checkbox" id="showKey" onchange="toggleKey()"> показать ключ</label>
+      </div>
+      <p class="muted small">Пустой адрес или модель означают «взять из config.json». Список моделей — кнопка ↻ у поля, можно ввести вручную. Проверка — «Проверить LLM и HA».</p>
+    </div>
+
+    <div class="box">
+      <h2>Конфиг</h2>
+      <p class="muted small">Здесь <kbd>config.json</kbd>: routing, tools, airplay, dialogue. Подключение LLM и ключ — в блоке выше (<kbd>runtime.env</kbd>). Сохранение: бэкап → запись → проверка → перезапуск; при ошибке прежний конфиг вернётся.</p>
+      <div class="row" style="margin:8px 0"><button class="btn" onclick="loadConfig()">Загрузить</button><button class="btn primary" onclick="saveConfig()">Сохранить и проверить</button><button class="btn" onclick="EDITING=false;toast('Автообновление включено.')">Закрыть редактор</button></div>
+      <textarea id="config" spellcheck="false" placeholder="Нажмите «Загрузить»."></textarea>
+    </div>
+
+    <div class="box">
+      <h2>Endpoint и откат</h2>
+      <p class="muted small">«Применить» записывает адрес Bridge в <kbd>quasar.cfg</kbd>; «Откат» возвращает штатный адрес Алисы. После обоих действий нужна перезагрузка станции.</p>
+      <div class="row">
+        <button class="btn" onclick="confirmAct('bridge_apply','Записать endpoint Bridge в конфиг прошивки? Нужна перезагрузка.')">Применить endpoint</button>
+        <button class="btn danger" onclick="confirmAct('bridge_rollback','Вернуть штатный endpoint Алисы? Нужна перезагрузка.')">Откатить endpoint</button>
+      </div>
+    </div>
+
+    <div class="box">
+      <h2>Журнал Bridge</h2>
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn" onclick="loadBridgeLog()">Обновить</button>
+        <select id="logFilter" onchange="renderBridgeLog()" style="width:auto;min-width:180px">
+          <option value="important">Важное</option>
+          <option value="all">Все события</option>
+          <option value="errors">Только предупреждения и ошибки</option>
+        </select>
+        <label class="small muted" style="display:flex;align-items:center;gap:6px;margin:0;white-space:nowrap"><input type="checkbox" id="logAuto" onchange="toggleLogAuto()"> автообновление</label>
+      </div>
+      <p class="muted small">«Важное» скрывает служебные кадры и повторяющиеся статусы; сырой JSON — по клику.</p>
+      <div id="bridgeLog" class="log muted">Нажмите «Обновить».</div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-help">
+    <div class="box">
+      <h2>Что здесь есть</h2>
+      <p>Панель управляет двумя слоями станции. <b>Quasar Bridge</b> остаётся голосовым сервером Алисы и решает, кто ответит: Яндекс, ваша LLM или Home Assistant. <b>ChatGPT Voice</b> — отдельный нативный клиент: по команде он забирает микрофон и динамик и говорит с ChatGPT.</p>
+      <p class="muted">Пока Bridge остановлен, Алиса не отвечает и не слышит команды: прошивка ходит к нему как к голосовому серверу.</p>
+    </div>
+
+    <div class="box">
+      <h2>Команды голосом</h2>
+      <table>
+        <tr><th>Скажите</th><th>Что будет</th></tr>
+        <tr><td>«Алиса, открой чат»</td><td>Продолжить разговор с ChatGPT</td></tr>
+        <tr><td>«Алиса, создай новый чат»</td><td>Начать новый разговор</td></tr>
+        <tr><td>«Алиса, открой предыдущий чат»</td><td>Вернуться к прошлому</td></tr>
+        <tr><td>«Алиса, закрой чат»</td><td>Вернуть штатную Алису</td></tr>
+        <tr><td>«Алиса, спроси нейросеть: …»</td><td>Ответ вашей LLM через Bridge (голос Алисы)</td></tr>
+        <tr><td>«Алиса, начни новый разговор»</td><td>Стереть память Bridge</td></tr>
+      </table>
+      <p class="muted small">Фразы можно изменить на вкладке ChatGPT. Ответ ChatGPT идёт его голосом; музыка Яндекса ставится на паузу.</p>
+    </div>
+
+    <div class="box">
+      <h2>Если Алиса молчит</h2>
+      <ol>
+        <li>Посмотрите статус Bridge: должен быть «работает» и health OK.</li>
+        <li>Нажмите «Запустить Bridge». Если не поднимается — «Журнал Bridge».</li>
+        <li>Проверьте, что GPT не в режиме разговора: нажмите «Вернуться к Алисе».</li>
+        <li>Проверьте карточку «Endpoint»: если «не применён», Bridge работает, но колонка его не использует — «Применить endpoint» и перезагрузка.</li>
+        <li>Если endpoint применён, а Bridge остановлен — «Запустить Bridge».</li>
+      </ol>
+    </div>
+
+    <div class="box">
+      <h2>Если ChatGPT не отвечает</h2>
+      <ol>
+        <li>«Вход в ChatGPT сохранён»? Если нет — войдите с Mac: <kbd>alisa native login</kbd>.</li>
+        <li>Проверьте дневной лимит аккаунта и интернет станции.</li>
+        <li>Из России нужен VLESS: статус на вкладке ChatGPT, кнопка «Запустить».</li>
+        <li>При <kbd>ice_gather_timeout</kbd> попробуйте выключить STUN и перезапустить GPT.</li>
+        <li>Подробности — в «Журнал GPT» и на странице клиента.</li>
+      </ol>
+    </div>
+
+    <div class="box">
+      <h2>Страница клиента и код сопряжения</h2>
+      <p>У native-клиента есть своя страница: <a id="nativeHelp" href="#" target="_blank" style="color:var(--accent)">открыть</a>. Код сопряжения: <b id="pairingCode">…</b>. Она умеет переименовывать разговоры; панель — нет.</p>
+      <p class="muted small">Страница клиента слушает <kbd>:18080</kbd> и требует код. Панель читает её состояние сама, но код всё равно полезен для ручного доступа.</p>
+    </div>
+
+    <div class="box">
+      <h2>Bridge: маршрутизация и конфиг</h2>
+      <p>Подключение к модели и ключ хранятся в <kbd>runtime.env</kbd> и имеют приоритет над <kbd>config.json</kbd> — меняйте их в блоке «Подключение к LLM». В <kbd>config.json</kbd> остаются <kbd>routing</kbd>, <kbd>assistant_tools</kbd>, <kbd>airplay</kbd> и диалог. Панель проверяет конфиг и возвращает прежний при ошибке.</p>
+      <p class="muted small">«Проверить LLM и HA» делает реальный запрос к модели и Home Assistant. «Применить endpoint» нужен только для смены адреса Bridge в прошивке.</p>
+    </div>
+
+    <div class="box">
+      <h2>Настройки и обновление с Mac</h2>
+      <p>Панель пишет настройки прямо на станцию. Установщик на Mac хранит свой профиль: при переустановке или обновлении он применяет сохранённые фразы, подсветку, STUN и автозапуск, поэтому изменения из панели могут вернуться к значениям Mac. После обновления проверьте вкладку ChatGPT.</p>
+      <p>Автозапуск: панель только включает флаг. Init-скрипт и <kbd>boot.sh</kbd> ставит Mac-установщик; если их нет, включить нельзя.</p>
+      <p>VLESS: панель запускает и останавливает уже настроенный туннель и переключает GPT на него. Новый сервер или подписку настраивайте с Mac: <kbd>alisa native vpn</kbd>.</p>
+    </div>
+
+    <div class="box">
+      <h2>Возврат и обслуживание</h2>
+      <ul>
+        <li><b>Вернуть Алису сейчас:</b> «Остановить GPT» или «Вернуться к Алисе».</li>
+        <li><b>Убрать GPT совсем:</b> на Mac <kbd>alisa native uninstall</kbd>.</li>
+        <li><b>Убрать Bridge:</b> <kbd>control.sh rollback</kbd>, перезагрузка, затем удаление пакета.</li>
+        <li><b>Обновить GPT:</b> перезапустить <kbd>bootstrap-macos.sh</kbd> на Mac.</li>
+      </ul>
+    </div>
+
+    <div class="box">
+      <h2>Безопасность</h2>
+      <p>Панель работает по HTTP и только в приватных сетях. Пароль и конфиг Bridge с ключами LLM видны в локальной сети. Не пробрасывайте порт <kbd>8099</kbd> в интернет и не делайте его доступным из гостевой сети. Пароль можно сменить во вкладке «Обслуживание».</p>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-service">
+    <div class="box">
+      <h2>Панель</h2>
+      <p>Адрес: <b id="panelUrl">…</b><br>Пользователь: <b id="panelUser">…</b></p>
+      <label for="newPassword">Новый пароль (8–64, A–Z a–z 0–9 . _ -)</label>
+      <div class="row"><input id="newPassword" type="password" autocomplete="new-password" style="flex:1;min-width:220px"><button class="btn primary" onclick="changePassword()">Сменить пароль</button></div>
+      <p class="muted small">После смены панель перезапустится через 2 секунды; браузер попросит пароль заново.</p>
+    </div>
+
+    <div class="box">
+      <h2>Станция</h2>
+      <p class="muted small">Перезагрузка нужна после «Применить endpoint» и «Откатить endpoint». Все режимы и вход сохраняются.</p>
+      <button class="btn danger" onclick="confirmAct('station_reboot','Перезагрузить станцию? Панель и голос прервутся на минуту.')">Перезагрузить станцию</button>
+    </div>
+
+    <div class="box">
+      <h2>Диагностика</h2>
+      <pre id="rawStatus" class="muted">…</pre>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const val=id=>$(id).value;
+const VOICES=[['breeze','Breeze'],['cove','Cove'],['ember','Ember'],['fathom','Arbor'],['glimmer','Sol'],['juniper','Juniper'],['maple','Maple'],['orbit','Spruce'],['vale','Vale']];
+const STYLES=[['rainbow','Радуга'],['red','Красный'],['blue','Синий'],['green','Зелёный'],['purple','Фиолетовый'],['white','Белый'],['pulse-red','Пульс красный'],['pulse-blue','Пульс синий'],['pulse-green','Пульс зелёный'],['pulse-purple','Пульс фиолетовый'],['pulse-white','Пульс белый'],['off','Выключена']];
+const PHASES={idle:'Обычная Алиса',connecting:'Подключаем ChatGPT…',active:'Разговор с ChatGPT',stopping:'Возвращаем Алису…'};
+const ERRORS={voice_daily_limit_reached:'Дневной лимит голосового ChatGPT исчерпан.',voice_session_ended:'ChatGPT завершил сеанс.',login_required:'Нужно снова войти в ChatGPT.',voice_signaling_browser_challenge_403:'ChatGPT запросил проверку браузера.',voice_signaling_upstream_403:'ChatGPT отклонил подключение Voice.',voice_signaling_html_403:'ChatGPT вернул 403 до запуска звука.',ice_gather_timeout:'Не удалось собрать сетевые адреса Voice. Попробуйте без STUN.',webrtc_connect_timeout:'Не открылся канал Voice. Проверьте сеть/VPN.'};
+let TOKEN='',BUSY=false,EDITING=false,last=null;
+
+function toast(text,bad){const t=$('toast');t.textContent=text;t.style.borderColor=bad?'#8a3547':'#3b5478';t.classList.add('show');clearTimeout(t._timer);t._timer=setTimeout(()=>t.classList.remove('show'),3500)}
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function fill(select,items,current){const keep=current!==undefined?current:select.value;select.replaceChildren(...items.map(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;return o}));if([...select.options].some(o=>o.value===keep))select.value=keep}
+function modelName(raw){const s=String(raw||'');if(s.includes('yandexmidi')||s.includes('station-midi'))return 'Станция 2';if(s.includes('cucumber'))return 'Станция Миди';if(s.includes('plum'))return 'Лайт 2';if(s.includes('bergamot'))return 'Мини 3';if(s.includes('station-mini2'))return 'Мини 2';return s||'Станция'}
+function dot(id,state){const d=$(id);d.className='dot '+(state||'')}
+function busy(v){BUSY=v;document.querySelectorAll('button.btn').forEach(b=>b.disabled=v)}
+
+async function get(action){const r=await fetch('cgi-bin/api.cgi?action='+encodeURIComponent(action),{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}
+async function post(action,params,raw){let url='cgi-bin/api.cgi?action='+encodeURIComponent(action);if(params)url+='&'+new URLSearchParams(params).toString();const opts={method:'POST',headers:{'X-Panel-Token':TOKEN},cache:'no-store'};if(raw!==undefined){opts.headers['Content-Type']='text/plain';opts.body=raw}else{opts.body=''}const r=await fetch(url,opts);const text=await r.text();let data;try{data=JSON.parse(text)}catch(e){throw new Error('Некорректный ответ панели')}if(!r.ok||!data.ok)throw new Error(data.error||('HTTP '+r.status));return data}
+
+async function act(action,params){if(BUSY)return;busy(true);try{const data=await post(action,params);toast(data.message||'Готово.');await refresh()}catch(e){toast(e.message||'Ошибка.',true)}finally{busy(false)}}
+function confirmAct(action,text,params){if(confirm(text))act(action,params)}
+async function changePassword(){const value=val('newPassword');if(!/^[A-Za-z0-9._-]{8,64}$/.test(value)){toast('Пароль: 8–64 символа, A–Z a–z 0–9 . _ -',true);return}if(!confirm('Сменить пароль панели?'))return;await act('panel_password',{value});$('newPassword').value=''}
+
+async function loadLog(action,target){try{const text=await get(action);$(target).textContent=text||'Пусто.'}catch(e){$(target).textContent='Ошибка: '+e.message}}
+let BRIDGE_LOG=[],logTimer=null;
+const ROUTE_NAMES={yandex:'Яндекс',llm:'LLM',home:'Home Assistant',ha:'Home Assistant',mcp:'Home Assistant',local:'локально',refusal:'отказ',assistant:'ассистент'};
+const SOURCE_NAMES={home_disabled:'HA выключен',home:'HA',yandex:'Яндекс',llm:'LLM',local:'локально'};
+const FRAME_EVENTS={StreamControl:'управление потоком',RequestStat:'статистика запроса',TtsSpeak:'озвучка',Push:'данные',TextInput:'текст',ServerRequestReady:'запрос готов',SynchronizeState:'синхронизация',SpotterValidation:'валидация',AliceResponse:'ответ Алисы'};
+const LEVEL_NAMES={INFO:'ИНФО',WARN:'ВНИМ',ERROR:'ОШИБКА',DEBUG:'ОТЛАД'};
+const PLAYER_NAMES={idle:'простой',playing:'играет',buffering:'буферизация',paused:'пауза'};
+const EVENT_NAMES={voice_input:'голосовой ввод',text_input:'текст',server_action:'действие сервера'};
+function shortText(v,n=90){const s=typeof v==='string'?v:JSON.stringify(v);return s.length>n?s.slice(0,n-1)+'…':s}
+function bridgeText(d){const m=d.msg||'';
+  if(m==='quasar-bridge starting')return 'Bridge запущен'+(d.version?' · v'+d.version:'');
+  if(m==='native_server_ready')return 'Соединение с колонкой готово';
+  if(m==='native_route_decision'){let s='Маршрут: '+(ROUTE_NAMES[d.route]||d.route||'?');if(d.source)s+=' · '+(SOURCE_NAMES[d.source]||d.source);if(d.request)s+=' · запрос '+shortText(d.request,8);return s}
+  if(m==='native_route'){let s='Маршрут: '+(ROUTE_NAMES[d.route]||d.route||'?');if(d.sent)s+=' · отправлено';return s}
+  if(m==='native_cloud_shape')return 'Облако: '+(d.matched?'совпало':'нет совпадения');
+  if(m==='speaker_device_subscription_state')return 'Подписка колонки'+(d.status?' · '+d.status:'');
+  if(m==='speaker_alice_pro_subscription_state')return 'Алиса Про'+(d.status?' · '+d.status:'');
+  if(m==='llm_request')return 'Запрос к LLM';
+  if(m==='native_player_state')return 'Плеер: '+(PLAYER_NAMES[d.player_state]||d.player_state||'?')+(d.has_stream?' · поток есть':' · потока нет');
+  if(m==='native_request_shape')return 'Запрос: '+(EVENT_NAMES[d.event_type]||String(d.event_type||'?').replace(/_/g,' '))+(d.text_bytes?(' · текст '+d.text_bytes+' Б'):'')+(d.payload_bytes?(' · аудио '+d.payload_bytes+' Б'):'');
+  if(m==='native_asr_final')return 'Распознавание'+(d.code?(' · '+d.code):'')+(d.aggregate_present?' · итог есть':'');
+  if(m==='native_playback_status'){let s='Воспроизведение';if(d.error_class)s+=' · '+d.error_class;if(typeof d.playing==='boolean')s+=d.playing?' · играет':' · пауза';return s}
+  if(m==='frame'){const e=d.event||d.transport_type||'кадр';return (FRAME_EVENTS[e]||e)+(d.direction?' · '+d.direction:'')}
+  return m||'событие'}
+function bridgeDetail(d){const skip=new Set(['time','level','msg']);return Object.keys(d).filter(k=>!skip.has(k)&&d[k]!==null&&d[k]!==undefined&&d[k]!=='').map(k=>{const v=d[k];return k+'='+(typeof v==='object'?shortText(JSON.stringify(v)):shortText(String(v)))}).join(' · ')}
+function fmtLogTime(v){const d=new Date(v);return isNaN(d.getTime())?String(v).slice(11,19):d.toLocaleTimeString('ru-RU',{hour12:false})}
+function renderBridgeLog(){const box=$('bridgeLog'),filter=($('logFilter')||{}).value||'important';if(!BRIDGE_LOG.length){box.innerHTML='<p class="muted">Журнал пуст.</p>';return}
+  let shown=0,errors=0,html='';
+  for(const line of BRIDGE_LOG){let d=null;try{d=JSON.parse(line)}catch(e){}
+    let level=String((d&&d.level)||'INFO').toUpperCase();
+    if(d&&level==='INFO'&&((d.error_class&&d.error_class!=='none')||d.error))level='WARN';
+    if(level==='WARN'||level==='ERROR')errors++;
+    if(filter==='errors'&&level!=='WARN'&&level!=='ERROR')continue;
+    const quiet=d&&((d.msg==='frame'&&level!=='WARN'&&level!=='ERROR')||d.msg==='native_cloud_shape'||(d.msg==='native_player_state'&&d.player_state==='idle'&&!d.has_stream)||(d.msg==='native_playback_status'&&(!d.error_class||d.error_class==='none')&&level==='INFO')||((d.msg==='speaker_device_subscription_state'||d.msg==='speaker_alice_pro_subscription_state')&&(!d.status||d.status==='none')));
+    if(filter==='important'&&quiet)continue;
+    shown++;const time=d&&d.time?fmtLogTime(d.time):'';const text=d?bridgeText(d):line;const detail=d?bridgeDetail(d):'';
+    html+='<div class="logrow"><span class="logtime">'+esc(time)+'</span><span class="loglvl '+esc(level.toLowerCase())+'">'+esc(LEVEL_NAMES[level]||level)+'</span><span class="logmsg">'+esc(text)+(detail?'<span class="logdetail">'+esc(detail)+'</span>':'')+'</span>'+(d?'<details><summary>Подробности (JSON)</summary><pre>'+esc(JSON.stringify(d,null,2))+'</pre></details>':'')+'</div>'}
+  box.innerHTML='<div class="logmeta">Показано '+shown+' из '+BRIDGE_LOG.length+(errors?(' · предупреждений/ошибок: '+errors):'')+'</div>'+(html||'<p class="muted">Нет записей для выбранного фильтра.</p>')}
+async function loadBridgeLog(){try{const text=await get('bridge_logs');BRIDGE_LOG=text.split(/\r?\n/).filter(Boolean);renderBridgeLog()}catch(e){$('bridgeLog').textContent='Ошибка: '+e.message}}
+function toggleLogAuto(){if($('logAuto').checked){if(!logTimer)logTimer=setInterval(()=>{if(document.querySelector('nav button[data-tab="bridge"]').classList.contains('active'))loadBridgeLog()},5000)}else{clearInterval(logTimer);logTimer=null}}
+async function loadConfig(){try{$('config').value=await get('bridge_config');EDITING=true;toast('Конфиг загружен.')}catch(e){toast(e.message,true)}}
+async function saveConfig(){const text=$('config').value;if(!text.trim().startsWith('{')){toast('Конфиг должен начинаться с {',true);return}if(!confirm('Сохранить конфиг Bridge? Он будет проверен; при ошибке вернётся прежний.'))return;if(BUSY)return;busy(true);try{const data=await post('bridge_config',null,text);EDITING=false;toast(data.message||'Сохранено.');await refresh()}catch(e){toast(e.message||'Ошибка.',true)}finally{busy(false)}}
+async function loadBridgeEnv(){try{const d=JSON.parse(await get('bridge_env'));$('bMode').value=d.mode||'hybrid';$('bBase').value=d.base_url||'';$('bModel').value=d.model||'';const api=$('bApi'),v=d.api||'chat_completions';if(![...api.options].some(o=>o.value===v)){const o=document.createElement('option');o.value=v;o.textContent=v;api.append(o)}api.value=v;$('bKey').value=d.api_key||'';$('bHome').value=d.home_mcp_url||'';fillModels([]);toast('Подключение загружено.')}catch(e){toast(e.message,true)}}
+const MODEL_FALLBACK=['gpt-4.1','gpt-4.1-mini','gpt-4o','gpt-4o-mini','o3-mini','o4-mini'];
+function fillModels(extra){const dl=$('modelList'),values=[...new Set([val('bModel'),...MODEL_FALLBACK,...(extra||[])].filter(Boolean))];dl.replaceChildren(...values.map(m=>{const o=document.createElement('option');o.value=m;return o}))}
+async function loadModels(){try{const d=JSON.parse(await get('bridge_models'));if(!d.ok)throw new Error(d.error||'Список недоступен');fillModels(d.models);toast('Моделей: '+d.models.length)}catch(e){fillModels([]);toast('Список API недоступен; показаны типовые модели. Можно ввести вручную.',false)}}
+function saveGptLook(){act('gpt_settings',{voice:val('voice'),style:val('ledStyle'),scope:val('ledScope'),listen:val('listenLed')})}
+function saveGptNetwork(){const changed=last&&String(last.flags.stun)!==val('stun');if(changed&&!confirm('STUN изменится: GPT будет перезапущен. Сохранить?'))return;act('gpt_settings',{autostart:val('autoGpt'),vpn_autostart:val('autoVpn'),stun:val('stun')})}
+function saveBridgeEnv(){if(!confirm('Сохранить подключение и перезапустить Bridge? Голос на несколько секунд прервётся.'))return;act('bridge_env',{mode:val('bMode'),base_url:val('bBase'),model:val('bModel'),api:val('bApi'),api_key:val('bKey'),home_mcp_url:val('bHome')})}
+function toggleKey(){$('bKey').type=$('showKey').checked?'text':'password'}
+
+function loadPhrases(){const p=(last&&last.phrases)||{};$('pOpen').value=p.open||'';$('pNew').value=p.new||'';$('pClose').value=p.close||'';$('pPrevious').value=p.previous||''}
+function normalize(v){return String(v||'').toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/g,' ').trim().replace(/^алиса\s+/,'').replace(/\s+пожалуйста$/,'')}
+function savePhrases(){const values={open:normalize(val('pOpen')),new:normalize(val('pNew')),close:normalize(val('pClose')),previous:normalize(val('pPrevious'))};if(Object.values(values).some(v=>!v)){toast('Все фразы должны быть заполнены.',true);return}if(new Set(Object.values(values)).size!==4){toast('Фразы должны отличаться.',true);return}act('gpt_phrases',values)}
+
+function render(s){
+  last=s;const g=(()=>{try{return JSON.parse(s.gpt.raw||'{}')}catch(e){return {}}})();
+  const model=modelName(s.station.model),ip=s.station.ip||location.hostname;
+  $('stationMeta').textContent=[ip,model,s.station.firmware].filter(Boolean).join(' · ');
+  $('stationName').textContent=model;
+  $('stationSub').textContent=(s.station.ip||'')+(s.station.free_kb?(' · свободно '+Math.round(s.station.free_kb/1024)+' МБ'):'');
+  $('bridgeState').textContent=s.bridge.installed?(s.bridge.running?(s.bridge.healthy?'работает':'запущен, health не отвечает'):(s.bridge.healthy?'health OK, процесс не найден':'остановлен')):'не установлен';
+  dot('bridgeDot',s.bridge.installed?(s.bridge.running&&s.bridge.healthy?'ok':(s.bridge.running?'warn':'bad')):'');
+  $('bridgeSub').textContent=s.bridge.version?('версия '+s.bridge.version+(s.bridge.autostart?' · автозапуск':'')):'';
+  $('bridgeProc').textContent=s.bridge.running?'работает':'остановлен';
+  $('bridgeHealth').textContent=s.bridge.healthy?'OK':'нет';
+  $('bridgeEndpoint').textContent=s.bridge.endpoint_applied?'применён':'не применён';
+  $('bridgeVer').textContent=s.bridge.version?('версия '+s.bridge.version):'';
+  const phase=g.phase||'idle';
+  $('gptState').textContent=s.gpt.running?(PHASES[phase]||phase):'остановлен';
+  dot('gptDot',s.gpt.running?(phase==='idle'?'ok':(phase==='active'?'ok':'warn')):'bad');
+  $('gptSub').textContent=s.gpt.running?(s.gpt.login_saved?'вход сохранён':'нужен вход в ChatGPT'):'';
+  $('vpnState').textContent=s.flags.vpn_running?'работает':'выключен';
+  dot('vpnDot',s.flags.vpn_running?'ok':'');
+  $('vpnSub').textContent=s.flags.vpn_autostart?'автозапуск':'';
+  $('panelUrl').textContent=location.origin+'/';$('panelUser').textContent=s.panel.user;
+  const ui=(()=>{try{return JSON.parse(s.native_ui.raw||'{}')}catch(e){return {}}})();
+  const native='http://'+location.hostname+':'+(ui.port||18080)+'/';
+  $('nativeLink').href=native;$('nativeHelp').href=native;$('pairingCode').textContent=ui.pairing_code||'—';
+
+  const warns=[];
+  const ep=!!s.bridge.endpoint_applied;
+  if(s.bridge.installed&&!s.bridge.running){
+    if(ep)warns.push(['bad','Quasar Bridge остановлен, endpoint применён: Алиса не отвечает и не слышит команды. Запустите Bridge.']);
+    else warns.push(['warn','Quasar Bridge остановлен: LLM и Home Assistant недоступны, Алиса работает напрямую через Яндекс.']);
+  }
+  if(s.bridge.running&&!s.bridge.healthy)warns.push(['warn','Bridge запущен, но healthz не отвечает. Проверьте журнал.']);
+  if(s.bridge.installed&&s.bridge.running&&!ep)warns.push(['warn','Bridge работает, но endpoint не применён: колонка его не использует. Нажмите «Применить endpoint» и перезагрузите станцию.']);
+  if(s.flags.vpn_required&&!s.flags.vpn_running)warns.push(['bad','VLESS включён, но туннель не запущен: GPT не сможет подключиться (прямое подключение запрещено).']);
+  if(!s.gpt.running)warns.push(['warn','GPT остановлен. Нажмите «Запустить GPT», чтобы включить ChatGPT Voice.']);
+  if(s.gpt.running&&!s.gpt.login_saved)warns.push(['warn','Вход в ChatGPT не сохранён. Войдите с Mac: alisa native login.']);
+  if(!s.flags.boot_hook)warns.push(['warn','Автозапуск GPT не установлен: нет init-скрипта или boot.sh. Переустановите GPT с Mac.']);
+  if(g.error)warns.push(['bad',ERRORS[g.error]||('Ошибка GPT: '+g.error)]);
+  $('warnings').innerHTML=warns.map(([k,t])=>'<div class="'+k+'">'+esc(t)+'</div>').join('');
+
+  if(!EDITING){loadPhrases();const chat=$('chat');const sel=(g.settings&&g.settings.selected)||'';const chats=(g.settings&&g.settings.chats)||[];if(document.activeElement!==chat)fill(chat,chats.map(c=>[c.id,c.title+(c.confirmed?'':' · не подтверждён')]),sel)}
+  $('voice').value=(g.settings&&g.settings.voice)||'cove';
+  $('ledStyle').value=s.flags.led_style||'rainbow';$('ledScope').value=s.flags.led_scope||'speaking';$('listenLed').value=String(s.flags.listen_led||0);
+  $('autoGpt').value=String(s.flags.gpt_autostart||0);$('autoVpn').value=String(s.flags.vpn_autostart||0);$('stun').value=String(s.flags.stun);
+  $('autoGpt').disabled=!s.flags.boot_hook;
+  $('autoNote').textContent=s.flags.boot_hook?'':'Автозапуск не установлен: нет init-скрипта или boot.sh. Включить нельзя — переустановите GPT с Mac.';
+  $('rawStatus').textContent=JSON.stringify(s,null,2);
+}
+
+async function refresh(){try{const s=JSON.parse(await get('status'));render(s)}catch(e){$('stationMeta').textContent='Нет связи с панелью: '+e.message}}
+async function init(){
+  try{const t=JSON.parse(await get('token'));TOKEN=t.token}catch(e){toast('Не удалось получить токен: '+e.message,true);return}
+  fill($('voice'),VOICES);fill($('ledStyle'),STYLES);
+  await refresh();setInterval(()=>{if(!BUSY&&!EDITING)refresh()},5000);
+}
+document.addEventListener('focusin',e=>{if(e.target.matches('textarea,input,select'))EDITING=true;else EDITING=false});
+document.addEventListener('focusout',()=>{setTimeout(()=>{EDITING=!!(document.activeElement&&document.activeElement.matches('textarea,input,select'))},0)});
+function showTab(name){
+  const b=document.querySelector('nav button[data-tab="'+name+'"]');
+  if(!b)return;
+  EDITING=false;
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));
+  document.querySelectorAll('section.tab').forEach(s=>s.classList.toggle('active',s.id==='tab-'+name));
+  if(name==='bridge'){loadBridgeLog();loadBridgeEnv()}
+  if(name==='gpt')loadLog('gpt_logs','gptLog');
+}
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
+  showTab(b.dataset.tab);
+  history.replaceState(null,'','#'+b.dataset.tab);
+}));
+if(location.hash)showTab(location.hash.slice(1));
+init();
+</script>
+</body>
+</html>
