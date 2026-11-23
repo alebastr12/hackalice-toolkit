@@ -146,6 +146,22 @@ GET)
             [ -n "$_json" ] || { fail_json '502 Bad Gateway' 'Список моделей пуст.'; exit 0; }
             printf '{"ok":true,"models":[%s]}' "$_json" | respond '200 OK' application/json
             ;;
+        chatgpt_status)
+            _resp=$(diag_request GET /diagnostics/api/chatgpt) || true
+            _code=$(diag_code "$_resp"); _body=$(diag_body "$_resp")
+            if [ "$_code" = 200 ]; then
+                _signed=$(json_bool signed_in "$_body"); [ -n "$_signed" ] || _signed=false
+                _uses=$(json_bool uses_chatgpt "$_body"); [ -n "$_uses" ] || _uses=false
+                printf '{"ok":true,"signed_in":%s,"uses_chatgpt":%s}' "$_signed" "$_uses" |
+                    respond '200 OK' application/json
+            else
+                _e=$(json_str error "$_body")
+                case ${_code:-} in
+                    ''|000) fail_json '502 Bad Gateway' 'Bridge не запущен или нет curl: диагностика 127.0.0.1:2704 недоступна (opkg install curl).' ;;
+                    *) fail_json '502 Bad Gateway' "${_e:-Диагностика Bridge ответила $_code.}" ;;
+                esac
+            fi
+            ;;
         *)
             fail_json '404 Not Found' 'Неизвестное действие.'
             ;;
@@ -376,6 +392,46 @@ gpt_vpn)
         [ "$_was" = 1 ] && sh "$GPT_BASE/run.sh" start >/dev/null 2>&1 || true
         ok_message 'VLESS остановлен, GPT снова подключается напрямую.'
     fi
+    ;;
+chatgpt_login_start)
+    _resp=$(diag_request POST /diagnostics/api/chatgpt/start '{}') || true
+    _code=$(diag_code "$_resp"); _body=$(diag_body "$_resp")
+    if [ "$_code" = 200 ]; then
+        _url=$(json_str authorization_url "$_body")
+        _auto=$(json_bool automatic_return "$_body"); [ -n "$_auto" ] || _auto=false
+        if [ -n "$_url" ]; then
+            printf '{"ok":true,"url":"%s","automatic":%s}' \
+                "$(printf '%s' "$_url" | json_escape)" "$_auto" |
+                respond '200 OK' application/json
+            exit 0
+        fi
+    fi
+    _e=$(json_str error "$_body")
+    case ${_code:-} in
+        ''|000) fail_json '502 Bad Gateway' 'Bridge не запущен или нет curl: диагностика 127.0.0.1:2704 недоступна (opkg install curl).' ;;
+        429) fail_json '429 Too Many Requests' "${_e:-Слишком много попыток входа. Повторите через 10 минут.}" ;;
+        *) fail_json '502 Bad Gateway' "${_e:-Не удалось начать вход в ChatGPT.}" ;;
+    esac
+    ;;
+chatgpt_login_complete)
+    _cb=$(query_get callback || true)
+    case $_cb in
+        http://127.0.0.1:*/auth/callback*|http://localhost:*/auth/callback*) ;;
+        *) fail_json '400 Bad Request' 'Нужен адрес перенаправления из браузера: http://127.0.0.1:…/auth/callback?…'; exit 0 ;;
+    esac
+    [ "${#_cb}" -le 4096 ] || { fail_json '400 Bad Request' 'Адрес слишком длинный.'; exit 0; }
+    _payload=$(printf '{"callback":"%s"}' "$(printf '%s' "$_cb" | json_escape)")
+    _resp=$(diag_request POST /diagnostics/api/chatgpt/complete "$_payload") || true
+    _code=$(diag_code "$_resp"); _body=$(diag_body "$_resp")
+    if [ "$_code" = 200 ]; then
+        ok_message 'Вход в ChatGPT выполнен.'
+        exit 0
+    fi
+    _e=$(json_str error "$_body")
+    case ${_code:-} in
+        ''|000) fail_json '502 Bad Gateway' 'Bridge не запущен или нет curl: диагностика 127.0.0.1:2704 недоступна (opkg install curl).' ;;
+        *) fail_json '422 Unprocessable Entity' "${_e:-Не удалось завершить вход.}" ;;
+    esac
     ;;
 bridge_start|bridge_stop|bridge_restart|bridge_check|bridge_check_backends)
     _name=${action#bridge_}; _name=$(printf '%s' "$_name" | tr '_' '-')

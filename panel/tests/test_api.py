@@ -96,6 +96,16 @@ class ApiTest(unittest.TestCase):
         (self.base / 'bin' / 'curl').write_text(
             '#!/bin/sh\n'
             'case "$*" in\n'
+            '  *"/diagnostics/api/chatgpt/start"*)\n'
+            '    printf \'%s\\n200\' \'{"automatic_return":true,"authorization_url":'
+            '"https://auth.openai.com/authorize?state=1&x=2"}\' ;;\n'
+            '  *"/diagnostics/api/chatgpt/complete"*)\n'
+            '    case "$*" in\n'
+            '      *denied*) printf \'%s\\n422\' \'{"error":"Вход отменён в ChatGPT."}\'; exit 22 ;;\n'
+            '      *) printf \'%s\\n200\' \'{}\' ;;\n'
+            '    esac ;;\n'
+            '  *"/diagnostics/api/chatgpt"*)\n'
+            '    printf \'%s\\n200\' \'{"signed_in":false,"email":"","uses_chatgpt":true}\' ;;\n'
             '  *models*) echo \'{"data":[{"id":"model-a"},{"id":"model-b"}]}\' ;;\n'
             '  *) exit 0 ;;\n'
             'esac\n')
@@ -234,6 +244,46 @@ class ApiTest(unittest.TestCase):
         self.assertTrue(data['ok'], payload)
         self.assertEqual([m['id'] for m in data['models']], ['model-a', 'model-b'])
         self.assertEqual(data['models'][0]['name'], 'Model A')
+
+    def test_chatgpt_status(self):
+        status, payload = self.call(query='action=chatgpt_status')
+        self.assertIn('200', status)
+        data = json.loads(payload)
+        self.assertTrue(data['ok'], payload)
+        self.assertFalse(data['signed_in'])
+        self.assertTrue(data['uses_chatgpt'])
+
+    def test_chatgpt_login_start(self):
+        status, payload = self.call(method='POST', query='action=chatgpt_login_start',
+                                    token='test-token')
+        self.assertIn('200', status)
+        data = json.loads(payload)
+        self.assertTrue(data['ok'], payload)
+        self.assertIn('state=1&x=2', data['url'])
+        self.assertTrue(data['automatic'])
+
+    def test_chatgpt_login_complete(self):
+        query = 'action=chatgpt_login_complete&' + urlencode({
+            'callback': 'http://127.0.0.1:2704/auth/callback?code=abc&state=def'})
+        status, payload = self.call(method='POST', query=query, token='test-token')
+        self.assertIn('200', status)
+        self.assertTrue(json.loads(payload)['ok'], payload)
+
+    def test_chatgpt_login_complete_rejects_foreign_url(self):
+        query = 'action=chatgpt_login_complete&' + urlencode({
+            'callback': 'https://example.com/auth/callback?code=abc'})
+        status, payload = self.call(method='POST', query=query, token='test-token')
+        self.assertIn('400', status)
+        self.assertFalse(json.loads(payload)['ok'])
+
+    def test_chatgpt_login_complete_reports_denied(self):
+        query = 'action=chatgpt_login_complete&' + urlencode({
+            'callback': 'http://127.0.0.1:2704/auth/callback?error=denied'})
+        status, payload = self.call(method='POST', query=query, token='test-token')
+        self.assertIn('422', status)
+        data = json.loads(payload)
+        self.assertFalse(data['ok'])
+        self.assertIn('отмен', data['error'])
 
     def test_bridge_models_requires_chatgpt_login(self):
         self.env['ALISA_TEST_CHATGPT_EXPIRED'] = '1'

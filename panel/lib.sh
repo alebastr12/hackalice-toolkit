@@ -7,6 +7,7 @@ PANEL_BASE=${ALISA_PANEL_BASE:-/data/opt/alisa-panel}
 GPT_BASE=${ALISA_PANEL_GPT_BASE:-/data/opt/alisa-standalone}
 CLI_BASE=${ALISA_PANEL_CLI_BASE:-/data/opt/alisa-cli}
 BRIDGE_BASE=${ALISA_PANEL_BRIDGE_BASE:-/data/opt/quasar-bridge}
+BRIDGE_DIAG=${ALISA_PANEL_BRIDGE_DIAG:-http://127.0.0.1:2704}
 STATE=${ALISA_PANEL_STATE:-$GPT_BASE/state}
 RUNTIME=${ALISA_PANEL_RUNTIME:-/tmp/alisa-standalone}
 PANEL_CONF=${ALISA_PANEL_CONF:-$PANEL_BASE/panel.conf}
@@ -140,6 +141,32 @@ fetch_ok() {
 
 bridge_health() {
     fetch_ok http://127.0.0.1:8443/healthz
+}
+
+# Calls the local Bridge diagnostics API (loopback only). Prints body then the
+# HTTP status on the last line, so callers can report Bridge errors verbatim.
+diag_request() {
+    if [ -x /opt/bin/curl ]; then _curl=/opt/bin/curl
+    elif command -v curl >/dev/null 2>&1; then _curl=curl
+    else return 127; fi
+    if [ "$1" = POST ]; then
+        "$_curl" -sS -m 20 -X POST -H 'Content-Type: application/json' \
+            --data "$3" -w '\n%{http_code}' "$BRIDGE_DIAG$2" 2>/dev/null
+    else
+        "$_curl" -sS -m 8 -w '\n%{http_code}' "$BRIDGE_DIAG$2" 2>/dev/null
+    fi
+}
+
+diag_body() { printf '%s' "$1" | sed '$d'; }
+diag_code() { printf '%s' "$1" | tail -n 1; }
+
+json_bool() {
+    _v=$(printf '%s' "$2" | sed -n 's/.*"'"$1"'":\([a-z]*\).*/\1/p' | head -n 1)
+    case $_v in true|false) printf '%s' "$_v" ;; esac
+}
+
+json_str() {
+    printf '%s' "$2" | sed -n 's/.*"'"$1"'":"\([^"]*\)".*/\1/p' | head -n 1
 }
 
 bridge_version() {
