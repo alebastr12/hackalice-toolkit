@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install/update Alisa Panel on the Station from macOS over SSH.
+# Install/update Alisa Panel on the Station from macOS or Linux over SSH.
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 STATE_CONFIG=$HOME/.local/state/alisa-voice/native/config.json
@@ -94,9 +94,15 @@ trap 'rm -rf "$TMP"' EXIT
 
 echo 'Копирую панель на станцию…'
 ssh_run "rm -rf '$STAGE'; mkdir -p '$STAGE'"
-COPYFILE_DISABLE=1 tar -cf - -C "$ROOT/panel" \
-    --exclude tests --exclude '__pycache__' --exclude '*.pyc' --exclude '.DS_Store' . |
-    ssh_run "tar -xf - -C '$STAGE'"
+if [ "$(uname -s)" = Darwin ]; then
+    COPYFILE_DISABLE=1 tar -cf - -C "$ROOT/panel" \
+        --exclude tests --exclude '__pycache__' --exclude '*.pyc' --exclude '.DS_Store' . |
+        ssh_run "tar -xf - -C '$STAGE'"
+else
+    tar -cf - -C "$ROOT/panel" \
+        --exclude tests --exclude '__pycache__' --exclude '*.pyc' --exclude '.DS_Store' . |
+        ssh_run "tar -xf - -C '$STAGE'"
+fi
 
 echo 'Проверяю lighttpd и устанавливаю…'
 set +e

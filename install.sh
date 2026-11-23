@@ -1,11 +1,12 @@
 #!/bin/sh
 # HackAlice Toolkit: install Quasar Bridge, ChatGPT Voice and Alisa Panel
-# on a rooted Yandex Station from macOS. Interactive where upstream requires it.
+# on a rooted Yandex Station from macOS or Linux. Interactive where upstream requires it.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 STATE_CONFIG=$HOME/.local/state/alisa-voice/native/config.json
 BRIDGE_URL=https://github.com/skrashevich/quasar-bridge/releases/latest/download/install.sh
+LINUX_BOOTSTRAP=https://raw.githubusercontent.com/rison1337/Alisa-ChatGPT-voice-assistant/main/bootstrap-linux.sh
 
 HOST=${ALISA_TOOLKIT_HOST:-}
 SSH_PORT=${ALISA_TOOLKIT_SSH_PORT:-}
@@ -19,7 +20,7 @@ FORCE_VOICE=0
 
 usage() {
     cat <<EOF
-Установка HackAlice Toolkit на Яндекс Станцию.
+Установка HackAlice Toolkit на Яндекс Станцию (macOS или Linux, Windows — WSL).
 
   ./install.sh --host SPEAKER_IP [--ssh-port 2222] [--identity FILE]
                [--panel-port 8099]
@@ -38,6 +39,8 @@ usage() {
 
 Порядок: Quasar Bridge → ChatGPT Voice → веб-панель.
 Bridge и мастер GPT интерактивны: спросят LLM API, SSH-пароль и вход в ChatGPT.
+macOS: GPT ставится с macOS-патчем. Linux: официальный bootstrap-linux.sh (нужны
+Chromium, Xvfb, xauth). Windows: только WSL.
 EOF
 }
 
@@ -75,13 +78,23 @@ PY
 SSH_PORT=${SSH_PORT:-2222}
 if [ -n "$IDENTITY" ] && [ ! -f "$IDENTITY" ]; then IDENTITY=; fi
 
-[ "$(uname -s)" = Darwin ] || { echo 'Установщик рассчитан на macOS.' >&2; exit 1; }
+OS=$(uname -s)
+case $OS in
+    Darwin|Linux) ;;
+    MINGW*|MSYS*|CYGWIN*) echo 'Windows: запустите установщик в WSL (Ubuntu).' >&2; exit 1 ;;
+    *) echo 'Поддерживаются macOS и Linux; Windows — только WSL.' >&2; exit 1 ;;
+esac
 for tool in ssh curl python3; do
     command -v "$tool" >/dev/null 2>&1 || { echo "Не найден $tool." >&2; exit 1; }
 done
-for file in bootstrap-macos.sh install-panel.sh patches/macos-0.3.11.patch scripts/macos_patch.py panel/index.html; do
+for file in install-panel.sh panel/index.html; do
     [ -e "$ROOT/$file" ] || { echo "Повреждён пакет: нет $file." >&2; exit 1; }
 done
+if [ "$OS" = Darwin ]; then
+    for file in bootstrap-macos.sh patches/macos-0.3.11.patch scripts/macos_patch.py; do
+        [ -e "$ROOT/$file" ] || { echo "Повреждён пакет: нет $file." >&2; exit 1; }
+    done
+fi
 
 if [ -z "$HOST" ]; then
     printf 'IP-адрес станции: '
@@ -156,8 +169,21 @@ if [ "$SKIP_VOICE" = 0 ]; then
     if [ "$_installed" = 1 ] && [ "$FORCE_VOICE" = 0 ]; then
         echo 'ChatGPT Voice уже установлен — пропускаю (--voice для переустановки).'
     else
-        echo 'Ставлю CLI ChatGPT Voice на Mac и применяю macOS-патч…'
-        sh "$ROOT/bootstrap-macos.sh" --no-run
+        if [ "$OS" = Darwin ]; then
+            echo 'Ставлю/обновляю CLI ChatGPT Voice на Mac и применяю macOS-патч…'
+            sh "$ROOT/bootstrap-macos.sh" --no-run
+        else
+            echo 'Ставлю/обновляю ChatGPT Voice для Linux (bootstrap-linux.sh)…'
+            _linux=$(mktemp "${TMPDIR:-/tmp}/alisa-linux-install.XXXXXX")
+            curl -fsSL --retry 3 --connect-timeout 20 -o "$_linux" "$LINUX_BOOTSTRAP" ||
+                { rm -f "$_linux"; echo 'Не удалось скачать bootstrap-linux.sh.' >&2; exit 1; }
+            if ! sh "$_linux" --no-run; then
+                rm -f "$_linux"
+                echo 'Linux-установка ChatGPT Voice не завершена.' >&2
+                exit 1
+            fi
+            rm -f "$_linux"
+        fi
         [ -x "$HOME/.local/bin/alisa" ] || { echo 'CLI alisa не установился.' >&2; exit 1; }
         echo 'Запускаю мастер ChatGPT Voice: нативный режим, SSH, вход в ChatGPT, тест.'
         set -- native install --host "$HOST" --port "$SSH_PORT"

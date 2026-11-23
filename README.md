@@ -4,7 +4,7 @@
 (ответы своей LLM голосом Алисы), [ChatGPT Voice](https://github.com/rison1337/Alisa-ChatGPT-voice-assistant)
 (нативный голосовой ChatGPT на колонке) и локальная **веб-панель** для управления обоими.
 
-Один `install.sh` на macOS ставит всё по SSH. Панель живёт на станции и открывается
+Один `install.sh` на macOS или Linux ставит всё по SSH. Windows — только WSL. Панель живёт на станции и открывается
 из локальной сети.
 
 > **Проверено только на Яндекс Станции 2** (внутреннее имя `yandexmidi`), прошивка
@@ -60,10 +60,11 @@ Bridge и GPT работают вместе: Bridge — голосовой се�
 
 ## Требования
 
-- **Яндекс Станция 2** с уже полученным root и включённым SSH, доступная из сети Mac.
+- **Яндекс Станция 2** с уже полученным root и включённым SSH, доступная из сети компьютера.
   Инструкции: [hackalice.me/start](https://hackalice.me/start/). Для панели нужен
   Entware (пакеты `lighttpd`, `curl` установщик поставит сам).
-- **macOS** с Python 3.10+, `curl`, `ssh` и Chrome/Edge/Chromium для входа в ChatGPT.
+- **macOS или Linux** (Windows — WSL) с Python 3.10+, `curl`, `ssh`, `tar`.
+  Для входа: macOS — Chrome/Edge/Chromium; Linux — Chromium, Xvfb, xauth.
 - **Аккаунт ChatGPT** с доступным голосовым режимом.
 - Для Bridge — LLM с OpenAI-совместимым API (адрес, модель, ключ) и, по желанию,
   Home Assistant с MCP.
@@ -79,7 +80,7 @@ Bridge и GPT работают вместе: Bridge — голосовой се�
 3. [SSH и отключение обновлений](https://hackalice.me/start/ssh/) — поставьте SSH и
    заблокируйте OTA, чтобы доступ не пропал.
 
-Проверьте доступ с Mac:
+Проверьте доступ с компьютера:
 
 ```sh
 ssh -p 2222 root@SPEAKER_IP 'id -u'
@@ -103,9 +104,10 @@ cd hackalice-toolkit
 1. **Quasar Bridge** — если ещё не стоит, скачает официальный установщик и запустит
    мастер: адрес API, модель, ключ, Home Assistant MCP. Можно отказаться от
    переключения endpoint и сделать это позже в панели.
-2. **ChatGPT Voice** — поставит CLI на Mac, применит macOS-патч к релизу 0.3.11,
-   запустит мастер: нативный режим, IP/порт/пароль SSH, VLESS, автозапуск, подсветка,
-   вход в ChatGPT в браузере и голосовой тест.
+2. **ChatGPT Voice** — на macOS поставит CLI и применит патч к релизу 0.3.11; на Linux
+   скачает официальный Linux-релиз (`bootstrap-linux.sh`, патч не нужен). Затем мастер:
+   нативный режим, IP/порт/пароль SSH, VLESS, автозапуск, подсветка, вход в ChatGPT
+   в браузере и голосовой тест.
 3. **Панель** — поставит lighttpd/curl через Entware, создаст автозапуск и напечатает
    адрес, логин и пароль.
 
@@ -121,12 +123,21 @@ cd hackalice-toolkit
 
 ### Только ChatGPT Voice
 
+macOS:
+
 ```sh
 ./bootstrap-macos.sh
 ```
 
-Скачает официальный Linux-релиз, проверит SHA-256, применит
-`patches/macos-0.3.11.patch` и запустит мастер. Подробнее — [README-macos.md](README-macos.md).
+Linux (официальный upstream, без macOS-патча):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/rison1337/Alisa-ChatGPT-voice-assistant/main/bootstrap-linux.sh | sh
+```
+
+Нужны x86_64, Python 3.10+, Chromium, Xvfb и xauth. Windows — официальный пакет из
+[релизов upstream](https://github.com/rison1337/Alisa-ChatGPT-voice-assistant/releases/latest)
+(`START-WINDOWS.cmd`).
 
 ### Только Quasar Bridge
 
@@ -141,6 +152,16 @@ curl -fL -o /tmp/install-quasar-bridge.sh \
 `--skip-bridge`, `--skip-voice`, `--skip-panel`, `--bridge` (переустановить Bridge),
 `--voice` (переустановить GPT), `--panel-port`, `--identity`. Полный список: `./install.sh --help`.
 
+## Linux и Windows
+
+- **Linux:** `./install.sh` работает; GPT ставится официальным `bootstrap-linux.sh`
+  (x86_64, Python 3.10+, Chromium, Xvfb, xauth). macOS-патч не нужен; панель —
+  `./install-panel.sh`.
+- **Windows:** нативно не поддерживается. Используйте WSL (Ubuntu) для Bridge и
+  панели, а для GPT — официальный Windows-пакет upstream. В Git Bash/MSYS установщик
+  остановится и попросит WSL.
+- **Только панель** на Linux/WSL: `./install-panel.sh --host SPEAKER_IP --ssh-port 2222`.
+
 ## Панель
 
 Панель работает на станции: статический HTML + CGI на shell + `lighttpd` из Entware.
@@ -153,6 +174,9 @@ curl -fL -o /tmp/install-quasar-bridge.sh \
 `S99zz-alisa-panel stop/start`, читаемый журнал, общий «Сохранить»; 18 тестов API.
 Вход в ChatGPT и голосовой диалог выполняет владелец колонки.
 
+Основной прогон — macOS. Linux-ветка общего установщика добавлена, но на живой Linux
+не проверялась; Windows поддерживается только через WSL.
+
 ## Ограничения
 
 - Только **Станция 2** (`yandexmidi`). На Лайт/Мини/Миди/Макс не проверялось.
@@ -160,11 +184,13 @@ curl -fL -o /tmp/install-quasar-bridge.sh \
   стороне этих проектов. Наш пакет не пересобирает ARM-клиент и не меняет прошивку.
 - macOS-патч привязан к ChatGPT Voice **0.3.11**; для новой версии нужен обновлённый
   патч (`scripts/build-macos-patch.sh`).
-- Вход/выход ChatGPT — только с Mac (`alisa native login`/`logout`); панель не хранит
-  пароль и не логинится.
+- Вход/выход ChatGPT — только с компьютера (macOS/Linux, `alisa native login`/`logout`);
+  панель не хранит пароль и не логинится.
 - Панель — HTTP в локальной сети; не является заменой VPN/HTTPS.
 - Quasar Bridge и ChatGPT Voice могут перезаписывать часть настроек при обновлении с
-  Mac; после обновления проверьте вкладку ChatGPT.
+  компьютера; после обновления проверьте вкладку ChatGPT.
+- Linux-ветка не проверялась на живой Linux; Windows — только WSL (нативный
+  установщик не поддерживается).
 
 ## Обновление и удаление
 
