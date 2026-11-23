@@ -199,7 +199,7 @@ kbd{background:#0f1826;border:1px solid var(--line);border-radius:6px;padding:1p
 
     <div class="box hidden" id="chatgptBox">
       <h2>Вход в ChatGPT</h2>
-      <div id="chatgptOkNote" class="oknote hidden">Вход в ChatGPT выполнен. Список моделей загружается кнопкой ↻ у поля «Модель».</div>
+      <div id="chatgptOkNote" class="oknote hidden">Вход в ChatGPT выполнен. Список моделей загружается кнопкой ↻ у поля «Модель». <button type="button" class="inline-link" onclick="logoutChatGPT()">Выйти</button></div>
       <div id="chatgptNeedNote" class="warn hidden">Вход в ChatGPT не выполнен. Bridge не отдаёт список моделей и не может отвечать через подписку.</div>
       <div id="chatgptForm" class="hidden">
         <div class="row" style="margin-top:4px">
@@ -343,7 +343,7 @@ kbd{background:#0f1826;border:1px solid var(--line);border-radius:6px;padding:1p
       <p>После входа проверьте статус и модели:</p>
       <pre>ssh -p 2222 root@<span class="speaker-ip">SPEAKER_IP</span> 'sh /data/opt/quasar-bridge/app/control.sh chatgpt-status'
 ssh -p 2222 root@<span class="speaker-ip">SPEAKER_IP</span> 'sh /data/opt/quasar-bridge/app/control.sh chatgpt-models'</pre>
-      <p>Затем нажмите ↻ у поля «Модель»: список придёт от Bridge.</p>
+      <p>Затем нажмите ↻ у поля «Модель»: список придёт от Bridge. Выйти из аккаунта можно кнопкой «Выйти» в блоке «Вход в ChatGPT».</p>
       <p class="muted small">Ссылка входа одноразовая и действует 10 минут. Туннель после
       входа можно закрыть; порт 1455 на компьютере должен быть свободен.</p>
     </div>
@@ -484,6 +484,7 @@ function setChatGPTState(signed,error){$('chatgptOkNote').classList.toggle('hidd
 async function startChatGPTLogin(){if(BUSY)return;busy(true);try{const d=await post('chatgpt_login_start');$('chatgptUrl').value=d.url||'';$('chatgptOpen').href=d.url||'#';$('chatgptLink').classList.remove('hidden');$('chatgptHint').textContent=d.automatic?'Если панель открыта на самой станции, вход может завершиться сам — тогда нажмите «Проверить вход».':'После входа скопируйте адрес из браузера и вставьте его ниже.';toast('Ссылка готова: откройте её и войдите.')}catch(e){toast(e.message||'Не удалось начать вход.',true)}finally{busy(false)}}
 async function completeChatGPTLogin(){const callback=val('chatgptCallback').trim();if(!/^http:\/\/(127\.0\.0\.1|localhost):\d+\/auth\/callback\?/.test(callback)){toast('Вставьте полный адрес из браузера: http://127.0.0.1:…/auth/callback?…',true);return}if(BUSY)return;busy(true);try{const d=await post('chatgpt_login_complete',{callback});toast(d.message||'Вход выполнен.');$('chatgptCallback').value='';$('chatgptLink').classList.add('hidden');setChatGPTState(true);await loadModels()}catch(e){toast(e.message||'Вход не завершён.',true)}finally{busy(false)}}
 function resetChatGPTLogin(){$('chatgptLink').classList.add('hidden');$('chatgptCallback').value='';$('chatgptHint').textContent=''}
+async function logoutChatGPT(){if(!confirm('Выйти из ChatGPT на станции? Пока не войдёте снова, модели подписки будут недоступны.'))return;if(BUSY)return;busy(true);try{const d=await post('chatgpt_logout');toast(d.message||'Выход выполнен.');setChatGPTState(false)}catch(e){toast(e.message||'Не удалось выйти.',true)}finally{busy(false)}}
 function saveGptLook(){act('gpt_settings',{voice:val('voice'),style:val('ledStyle'),scope:val('ledScope'),listen:val('listenLed')})}
 function saveGptNetwork(){const changed=last&&String(last.flags.stun)!==val('stun');if(changed&&!confirm('STUN изменится: GPT будет перезапущен. Сохранить?'))return;act('gpt_settings',{autostart:val('autoGpt'),vpn_autostart:val('autoVpn'),stun:val('stun')})}
 function saveBridgeEnv(){if(!confirm('Сохранить подключение и перезапустить Bridge? Голос на несколько секунд прервётся.'))return;act('bridge_env',{mode:val('bMode'),base_url:val('bBase'),model:modelValue(),api:val('bApi'),api_key:val('bKey'),home_mcp_url:val('bHome')})}

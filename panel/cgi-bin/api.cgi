@@ -433,6 +433,19 @@ chatgpt_login_complete)
         *) fail_json '422 Unprocessable Entity' "${_e:-Не удалось завершить вход.}" ;;
     esac
     ;;
+chatgpt_logout)
+    _resp=$(diag_request POST /diagnostics/api/chatgpt/logout '{}') || true
+    _code=$(diag_code "$_resp"); _body=$(diag_body "$_resp")
+    if [ "$_code" = 200 ]; then
+        ok_message 'Выход из ChatGPT выполнен.'
+        exit 0
+    fi
+    _e=$(json_str error "$_body")
+    case ${_code:-} in
+        ''|000) fail_json '502 Bad Gateway' 'Bridge не запущен или нет curl: диагностика 127.0.0.1:2704 недоступна (opkg install curl).' ;;
+        *) fail_json '502 Bad Gateway' "${_e:-Не удалось выйти из ChatGPT.}" ;;
+    esac
+    ;;
 bridge_start|bridge_stop|bridge_restart|bridge_check|bridge_check_backends)
     _name=${action#bridge_}; _name=$(printf '%s' "$_name" | tr '_' '-')
     lock bridge || { fail_json '409 Conflict' 'Другое действие с Bridge уже выполняется.'; exit 0; }

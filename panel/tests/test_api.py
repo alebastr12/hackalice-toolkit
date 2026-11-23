@@ -104,6 +104,8 @@ class ApiTest(unittest.TestCase):
             '      *denied*) printf \'%s\\n422\' \'{"error":"Вход отменён в ChatGPT."}\'; exit 22 ;;\n'
             '      *) printf \'%s\\n200\' \'{}\' ;;\n'
             '    esac ;;\n'
+            '  *"/diagnostics/api/chatgpt/logout"*)\n'
+            '    echo logout >> "${ALISA_TEST_DIAG:-/dev/null}"; printf \'%s\\n200\' \'{}\' ;;\n'
             '  *"/diagnostics/api/chatgpt"*)\n'
             '    printf \'%s\\n200\' \'{"signed_in":false,"email":"","uses_chatgpt":true}\' ;;\n'
             '  *models*) echo \'{"data":[{"id":"model-a"},{"id":"model-b"}]}\' ;;\n'
@@ -121,6 +123,7 @@ class ApiTest(unittest.TestCase):
             'ALISA_PANEL_RUNTIME': str(self.runtime),
             'ALISA_PANEL_INIT_DIR': str(self.init),
             'ALISA_PANEL_FAKE_GPT_RUNNING': '1',
+            'ALISA_TEST_DIAG': str(self.base / 'diag.log'),
             'HTTP_HOST': '127.0.0.1:8099',
             'PATH': str(self.base / 'bin') + ':/usr/bin:/bin',
         }
@@ -268,6 +271,13 @@ class ApiTest(unittest.TestCase):
         status, payload = self.call(method='POST', query=query, token='test-token')
         self.assertIn('200', status)
         self.assertTrue(json.loads(payload)['ok'], payload)
+
+    def test_chatgpt_logout(self):
+        status, payload = self.call(method='POST', query='action=chatgpt_logout',
+                                    token='test-token')
+        self.assertIn('200', status)
+        self.assertTrue(json.loads(payload)['ok'], payload)
+        self.assertIn('logout', (self.base / 'diag.log').read_text())
 
     def test_chatgpt_login_complete_rejects_foreign_url(self):
         query = 'action=chatgpt_login_complete&' + urlencode({
