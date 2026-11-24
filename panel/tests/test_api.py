@@ -45,6 +45,10 @@ class ApiTest(unittest.TestCase):
             f'state={self.bridge}\n'
             'case "$1" in\n'
             'status) exit 1;;\n'
+            'check-backends)\n'
+            '  echo \'{"time":"2026-11-24T17:00:00Z","level":"INFO","msg":"quasar-bridge starting"}\'\n'
+            '  if [ -f "$state/check-fail" ]; then echo "LLM: error: daily limit"; exit 1; fi\n'
+            '  echo "LLM: ok; Home Assistant: disabled"; exit 0;;\n'
             'check) if grep -q bad "$state/config.json"; then echo "config error"; exit 1; fi; exit 0;;\n'
             'restart) echo "Bridge healthy (PID 1)"; exit 0;;\n'
             'logs) echo "bridge log";;\n'
@@ -271,6 +275,22 @@ class ApiTest(unittest.TestCase):
         status, payload = self.call(method='POST', query=query, token='test-token')
         self.assertIn('200', status)
         self.assertTrue(json.loads(payload)['ok'], payload)
+
+    def test_chatgpt_check(self):
+        status, payload = self.call(method='POST', query='action=chatgpt_check',
+                                    token='test-token')
+        self.assertIn('200', status)
+        data = json.loads(payload)
+        self.assertTrue(data['ok'], payload)
+        self.assertEqual(data['llm'], 'ok')
+        self.assertGreaterEqual(data['seconds'], 0)
+
+    def test_chatgpt_check_failure(self):
+        (self.bridge / 'check-fail').write_text('1')
+        status, payload = self.call(method='POST', query='action=chatgpt_check',
+                                    token='test-token')
+        self.assertIn('502', status)
+        self.assertIn('daily limit', json.loads(payload)['error'])
 
     def test_chatgpt_logout(self):
         status, payload = self.call(method='POST', query='action=chatgpt_logout',

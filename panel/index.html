@@ -48,6 +48,8 @@ textarea{width:100%;min-height:300px;font:12.5px/1.4 ui-monospace,Menlo,Consolas
 .copy-btn{position:absolute;top:7px;right:7px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:3px 9px;font:12px/1.5 system-ui;cursor:pointer}
 .copy-btn:hover{color:var(--text);border-color:#3d5375}
 .inline-link{background:none;border:0;color:var(--accent);font:inherit;cursor:pointer;padding:0;text-decoration:underline}
+.check-ok{color:var(--ok)}
+.check-bad{color:var(--bad)}
 pre{background:#0a111c;border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;max-height:420px;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;color:#cfe0f7;margin:0}
 .log{border:1px solid var(--line);border-radius:10px;padding:4px 12px;max-height:540px;overflow:auto;background:#0a111c;font:12.5px/1.45 ui-monospace,Menlo,Consolas,monospace}
 .logmeta{color:var(--muted);font:12px system-ui;padding:8px 0;border-bottom:1px solid var(--line)}
@@ -200,6 +202,10 @@ kbd{background:#0f1826;border:1px solid var(--line);border-radius:6px;padding:1p
     <div class="box hidden" id="chatgptBox">
       <h2>Вход в ChatGPT</h2>
       <div id="chatgptOkNote" class="oknote hidden">Вход в ChatGPT выполнен. Список моделей загружается кнопкой ↻ у поля «Модель». <button type="button" class="inline-link" onclick="logoutChatGPT()">Выйти</button></div>
+      <div id="chatgptCheck" class="row hidden" style="margin-top:2px">
+        <button class="btn" id="chatgptCheckBtn" onclick="checkChatGPTSubscription()">Проверить подписку</button>
+        <span id="chatgptCheckResult" class="muted small"></span>
+      </div>
       <div id="chatgptNeedNote" class="warn hidden">Вход в ChatGPT не выполнен. Bridge не отдаёт список моделей и не может отвечать через подписку.</div>
       <div id="chatgptForm" class="hidden">
         <div class="row" style="margin-top:4px">
@@ -347,7 +353,7 @@ kbd{background:#0f1826;border:1px solid var(--line);border-radius:6px;padding:1p
       <p>После входа проверьте статус и модели:</p>
       <pre>ssh -p 2222 root@<span class="speaker-ip">SPEAKER_IP</span> 'sh /data/opt/quasar-bridge/app/control.sh chatgpt-status'
 ssh -p 2222 root@<span class="speaker-ip">SPEAKER_IP</span> 'sh /data/opt/quasar-bridge/app/control.sh chatgpt-models'</pre>
-      <p>Затем нажмите ↻ у поля «Модель»: список придёт от Bridge. Выйти из аккаунта можно кнопкой «Выйти» в блоке «Вход в ChatGPT».</p>
+      <p>Затем нажмите ↻ у поля «Модель»: список придёт от Bridge. После входа панель сама проверяет подписку настоящим запросом к LLM и показывает результат. Выйти из аккаунта можно кнопкой «Выйти» в блоке «Вход в ChatGPT».</p>
       <p class="muted small">Ссылка входа одноразовая и действует 10 минут. Туннель после
       входа можно закрыть; порт 1455 на компьютере должен быть свободен.</p>
     </div>
@@ -485,12 +491,13 @@ function fillModels(extra,current){const select=$('bModel'),want=current!==undef
 async function loadModels(){try{const d=await getJson('bridge_models');const list=(d.models||[]).map(m=>typeof m==='string'?{id:m,name:m}:m);fillModels(list,modelValue());toast('Моделей: '+list.length)}catch(e){fillModels([],modelValue());toast(e.message||'Список моделей недоступен.',true)}}
 let CHATGPT_SIGNED=null;
 async function refreshChatGPT(quiet){const box=$('chatgptBox');if(!box)return;if(val('bApi')!=='chatgpt'){box.classList.add('hidden');return}box.classList.remove('hidden');try{const d=await getJson('chatgpt_status');CHATGPT_SIGNED=!!d.signed_in;setChatGPTState(CHATGPT_SIGNED)}catch(e){if(quiet&&CHATGPT_SIGNED!==null){$('chatgptHint').textContent=e.message||'';return}CHATGPT_SIGNED=false;setChatGPTState(false,e.message)}}
-function setChatGPTState(signed,error){$('chatgptOkNote').classList.toggle('hidden',!signed);$('chatgptNeedNote').classList.toggle('hidden',signed);$('chatgptForm').classList.toggle('hidden',signed);$('chatgptHint').textContent=signed?'':(error||'');if(signed){$('chatgptLink').classList.add('hidden');$('chatgptCallback').value=''}}
+function setChatGPTState(signed,error){$('chatgptOkNote').classList.toggle('hidden',!signed);$('chatgptNeedNote').classList.toggle('hidden',signed);$('chatgptForm').classList.toggle('hidden',signed);$('chatgptCheck').classList.toggle('hidden',!signed);$('chatgptHint').textContent=signed?'':(error||'');if(signed){$('chatgptLink').classList.add('hidden');$('chatgptCallback').value=''}else{$('chatgptCheckResult').textContent='';$('chatgptCheckResult').className='muted small'}}
 async function startChatGPTLogin(){if(BUSY)return;busy(true);try{const d=await post('chatgpt_login_start');$('chatgptUrl').value=d.url||'';$('chatgptOpen').href=d.url||'#';$('chatgptLink').classList.remove('hidden');$('chatgptHint').textContent=d.automatic?'Если панель открыта на самой станции, вход может завершиться сам — тогда нажмите «Проверить вход».':'После входа скопируйте адрес из браузера и вставьте его ниже.';toast('Ссылка готова: откройте её и войдите.')}catch(e){toast(e.message||'Не удалось начать вход.',true)}finally{busy(false)}}
-async function completeChatGPTLogin(){const callback=val('chatgptCallback').trim();if(!/^http:\/\/(127\.0\.0\.1|localhost):\d+\/auth\/callback\?/.test(callback)){toast('Вставьте полный адрес из браузера: http://127.0.0.1:…/auth/callback?…',true);return}if(BUSY)return;busy(true);try{const d=await post('chatgpt_login_complete',{callback});toast(d.message||'Вход выполнен.');$('chatgptCallback').value='';$('chatgptLink').classList.add('hidden');setChatGPTState(true);await loadModels()}catch(e){toast(e.message||'Вход не завершён.',true)}finally{busy(false)}}
+async function completeChatGPTLogin(){const callback=val('chatgptCallback').trim();if(!/^http:\/\/(127\.0\.0\.1|localhost):\d+\/auth\/callback\?/.test(callback)){toast('Вставьте полный адрес из браузера: http://127.0.0.1:…/auth/callback?…',true);return}if(BUSY)return;busy(true);try{const d=await post('chatgpt_login_complete',{callback});toast(d.message||'Вход выполнен.');$('chatgptCallback').value='';$('chatgptLink').classList.add('hidden');setChatGPTState(true);await loadModels();setTimeout(()=>checkChatGPTSubscription(),0)}catch(e){toast(e.message||'Вход не завершён.',true)}finally{busy(false)}}
 function resetChatGPTLogin(){$('chatgptLink').classList.add('hidden');$('chatgptCallback').value='';$('chatgptHint').textContent=''}
 async function pasteChatGPT(){const input=$('chatgptCallback');input.focus();try{if(navigator.clipboard&&navigator.clipboard.readText){const text=(await navigator.clipboard.readText()).trim();if(text){input.value=text;toast('Адрес вставлен.');return}}throw new Error('clipboard')}catch(e){input.select();toast('Браузер не даёт читать буфер по HTTP. Нажмите ⌘V в поле.',true)}}
 async function logoutChatGPT(){if(!confirm('Выйти из ChatGPT на станции? Пока не войдёте снова, модели подписки будут недоступны.'))return;if(BUSY)return;busy(true);try{const d=await post('chatgpt_logout');toast(d.message||'Выход выполнен.');setChatGPTState(false)}catch(e){toast(e.message||'Не удалось выйти.',true)}finally{busy(false)}}
+async function checkChatGPTSubscription(){const btn=$('chatgptCheckBtn'),out=$('chatgptCheckResult');btn.disabled=true;out.className='muted small';out.textContent='Проверяю подписку…';try{const d=await post('chatgpt_check');out.className='small check-ok';out.textContent='LLM отвечает'+(d.seconds!==undefined?' · '+d.seconds+' с':'')}catch(e){out.className='small check-bad';out.textContent=e.message||'Подписка не ответила.'}finally{btn.disabled=false}}
 function saveGptLook(){act('gpt_settings',{voice:val('voice'),style:val('ledStyle'),scope:val('ledScope'),listen:val('listenLed')})}
 function saveGptNetwork(){const changed=last&&String(last.flags.stun)!==val('stun');if(changed&&!confirm('STUN изменится: GPT будет перезапущен. Сохранить?'))return;act('gpt_settings',{autostart:val('autoGpt'),vpn_autostart:val('autoVpn'),stun:val('stun')})}
 function saveBridgeEnv(){if(!confirm('Сохранить подключение и перезапустить Bridge? Голос на несколько секунд прервётся.'))return;act('bridge_env',{mode:val('bMode'),base_url:val('bBase'),model:modelValue(),api:val('bApi'),api_key:val('bKey'),home_mcp_url:val('bHome')})}

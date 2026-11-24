@@ -433,6 +433,22 @@ chatgpt_login_complete)
         *) fail_json '422 Unprocessable Entity' "${_e:-Не удалось завершить вход.}" ;;
     esac
     ;;
+chatgpt_check)
+    _t0=$(date +%s)
+    _out=$(sh "$BRIDGE_BASE/app/control.sh" check-backends 2>&1); _rc=$?
+    _t1=$(date +%s); _secs=$((_t1 - _t0)); [ "$_secs" -ge 0 ] || _secs=0
+    _llm=$(printf '%s' "$_out" | sed -n 's/^LLM:[[:space:]]*\([^;]*\).*/\1/p' | tail -n 1 |
+        sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    if [ "$_rc" -eq 0 ] && [ -n "$_llm" ]; then
+        printf '{"ok":true,"llm":"%s","seconds":%s}' \
+            "$(printf '%s' "$_llm" | json_escape)" "$_secs" |
+            respond '200 OK' application/json
+        exit 0
+    fi
+    _e=$(printf '%s' "$_out" | grep -v '^{' | tail -n 3 | tr '\n' ' ' |
+        sed 's/[[:space:]]*$//' | json_escape)
+    fail_json '502 Bad Gateway' "${_e:-Подписка не ответила.}"
+    ;;
 chatgpt_logout)
     _resp=$(diag_request POST /diagnostics/api/chatgpt/logout '{}') || true
     _code=$(diag_code "$_resp"); _body=$(diag_body "$_resp")
