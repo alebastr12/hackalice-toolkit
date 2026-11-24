@@ -127,6 +127,20 @@ kbd{background:#0f1826;border:1px solid var(--line);border-radius:6px;padding:1p
 
   <section class="tab" id="tab-gpt">
     <div class="box">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <h2 style="margin:0">Вход в ChatGPT Voice</h2>
+        <button class="btn" onclick="goTab('help')">Как войти</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span class="dot" id="voiceDot"></span>
+        <b id="voiceLogin">…</b>
+        <span class="muted small" id="voiceNote"></span>
+      </div>
+      <p class="muted small">Отдельный вход от Bridge: сессия Voice хранится в <kbd>web-session.json</kbd>,
+      вход — с Mac командой <kbd>alisa native login</kbd>. Истёкший вход Bridge на Voice не влияет.</p>
+    </div>
+
+    <div class="box">
       <h2>Разговор</h2>
       <label for="chat">Выбранный разговор</label>
       <div class="row">
@@ -354,6 +368,8 @@ kbd{background:#0f1826;border:1px solid var(--line);border-radius:6px;padding:1p
       <pre>ssh -p 2222 root@<span class="speaker-ip">SPEAKER_IP</span> 'sh /data/opt/quasar-bridge/app/control.sh chatgpt-status'
 ssh -p 2222 root@<span class="speaker-ip">SPEAKER_IP</span> 'sh /data/opt/quasar-bridge/app/control.sh chatgpt-models'</pre>
       <p>Затем нажмите ↻ у поля «Модель»: список придёт от Bridge. После входа панель сама проверяет подписку настоящим запросом к LLM и показывает результат. Выйти из аккаунта можно кнопкой «Выйти» в блоке «Вход в ChatGPT».</p>
+      <p class="muted small">Это вход Bridge для LLM. Вход ChatGPT Voice — отдельный:
+      <kbd>alisa native login</kbd> (см. «Если ChatGPT не отвечает»); сессии не связаны.</p>
       <p class="muted small">Ссылка входа одноразовая и действует 10 минут. Туннель после
       входа можно закрыть; порт 1455 на компьютере должен быть свободен.</p>
     </div>
@@ -524,6 +540,10 @@ function render(s){
   $('gptState').textContent=s.gpt.running?(PHASES[phase]||phase):'остановлен';
   dot('gptDot',s.gpt.running?(phase==='idle'?'ok':(phase==='active'?'ok':'warn')):'bad');
   $('gptSub').textContent=s.gpt.running?(s.gpt.login_saved?'вход сохранён':'нужен вход в ChatGPT'):'';
+  const gptError=g.error?(ERRORS[g.error]||('Ошибка GPT: '+g.error)):'';
+  $('voiceDot').className='dot '+(s.gpt.running?(s.gpt.login_saved?'ok':'bad'):'');
+  $('voiceLogin').textContent=(s.gpt.running?(s.gpt.login_saved?'Вход сохранён':'Нужен вход в ChatGPT'):'GPT остановлен');
+  $('voiceNote').textContent=gptError?('Ошибка: '+gptError):(s.gpt.running?(PHASES[phase]||phase):'Вход сохранится после запуска.');
   $('vpnState').textContent=s.flags.vpn_running?'работает':'выключен';
   dot('vpnDot',s.flags.vpn_running?'ok':'');
   $('vpnSub').textContent=s.flags.vpn_autostart?'автозапуск':'';
@@ -577,6 +597,7 @@ document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()
   showTab(b.dataset.tab);
   history.replaceState(null,'','#'+b.dataset.tab);
 }));
+function goTab(name){const b=document.querySelector('nav button[data-tab="'+name+'"]');if(b)b.click()}
 if(location.hash)showTab(location.hash.slice(1));
 function copyText(text){if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(text);return new Promise((ok,bad)=>{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.top='-1000px';document.body.appendChild(ta);ta.select();let done=false;try{done=document.execCommand('copy')}catch(e){done=false}ta.remove();done?ok():bad(new Error('copy failed'))})}
 function setupCopyButtons(){document.querySelectorAll('#tab-help pre').forEach(pre=>{const wrap=document.createElement('div');wrap.className='prewrap';pre.parentNode.insertBefore(wrap,pre);wrap.appendChild(pre);const b=document.createElement('button');b.type='button';b.className='copy-btn';b.textContent='Копировать';b.onclick=()=>copyText(pre.innerText).then(()=>{b.textContent='Скопировано';setTimeout(()=>{b.textContent='Копировать'},1500)},()=>toast('Не удалось скопировать. Выделите текст вручную.',true));wrap.appendChild(b)})}
