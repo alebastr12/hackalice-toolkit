@@ -214,9 +214,13 @@ kbd{background:#0f1826;border:1px solid var(--line);border-radius:6px;padding:1p
           </div>
           <p class="muted small">Откройте ссылку и войдите в ChatGPT. После входа браузер попробует открыть
           <kbd>127.0.0.1:2704</kbd> и покажет ошибку — так и должно быть: скопируйте адрес из
-          адресной строки целиком и вставьте ниже.</p>
+          адресной строки целиком и вставьте ниже. Кнопка «Вставить» работает, если браузер
+          разрешает чтение буфера; иначе нажмите ⌘V (Mac) или долгое нажатие → «Вставить» (iPhone).</p>
           <label for="chatgptCallback">Адрес после входа</label>
-          <input id="chatgptCallback" placeholder="http://127.0.0.1:2704/auth/callback?code=…&amp;state=…" spellcheck="false">
+          <div class="row" style="flex-wrap:nowrap;gap:6px">
+            <input id="chatgptCallback" placeholder="http://127.0.0.1:2704/auth/callback?code=…&amp;state=…" spellcheck="false" style="flex:1;min-width:120px">
+            <button type="button" class="btn" onclick="pasteChatGPT()" title="Вставить адрес из буфера обмена">Вставить</button>
+          </div>
           <div class="row" style="margin-top:10px">
             <button class="btn primary" onclick="completeChatGPTLogin()">Завершить вход</button>
             <button class="btn" onclick="resetChatGPTLogin()">Скрыть</button>
@@ -479,11 +483,13 @@ function modelValue(){const s=$('bModel');return s&&s.value!=='__custom__'?s.val
 function modelChoice(){const custom=$('bModel').value==='__custom__';$('bModelCustom').classList.toggle('hidden',!custom);if(custom)$('bModelCustom').focus()}
 function fillModels(extra,current){const select=$('bModel'),want=current!==undefined?current:modelValue(),items=[];if(want)items.push({id:want,name:want});items.push(...MODEL_FALLBACK);items.push(...(extra||[]).map(m=>typeof m==='string'?{id:m,name:m}:m));const seen=new Set(),nodes=[];for(const item of items){const id=item&&item.id;if(!id||seen.has(id))continue;seen.add(id);const o=document.createElement('option');o.value=id;o.textContent=(item.name&&item.name!==id)?item.name:id;nodes.push(o)}const custom=document.createElement('option');custom.value='__custom__';custom.textContent='Другая модель…';nodes.push(custom);select.replaceChildren(...nodes);if([...select.options].some(o=>o.value===want))select.value=want;else select.value='__custom__';if(select.value==='__custom__'&&want)$('bModelCustom').value=want;modelChoice()}
 async function loadModels(){try{const d=await getJson('bridge_models');const list=(d.models||[]).map(m=>typeof m==='string'?{id:m,name:m}:m);fillModels(list,modelValue());toast('Моделей: '+list.length)}catch(e){fillModels([],modelValue());toast(e.message||'Список моделей недоступен.',true)}}
-async function refreshChatGPT(){const box=$('chatgptBox');if(!box)return;if(val('bApi')!=='chatgpt'){box.classList.add('hidden');return}box.classList.remove('hidden');try{const d=await getJson('chatgpt_status');setChatGPTState(!!d.signed_in)}catch(e){setChatGPTState(false,e.message)}}
+let CHATGPT_SIGNED=null;
+async function refreshChatGPT(quiet){const box=$('chatgptBox');if(!box)return;if(val('bApi')!=='chatgpt'){box.classList.add('hidden');return}box.classList.remove('hidden');try{const d=await getJson('chatgpt_status');CHATGPT_SIGNED=!!d.signed_in;setChatGPTState(CHATGPT_SIGNED)}catch(e){if(quiet&&CHATGPT_SIGNED!==null){$('chatgptHint').textContent=e.message||'';return}CHATGPT_SIGNED=false;setChatGPTState(false,e.message)}}
 function setChatGPTState(signed,error){$('chatgptOkNote').classList.toggle('hidden',!signed);$('chatgptNeedNote').classList.toggle('hidden',signed);$('chatgptForm').classList.toggle('hidden',signed);$('chatgptHint').textContent=signed?'':(error||'');if(signed){$('chatgptLink').classList.add('hidden');$('chatgptCallback').value=''}}
 async function startChatGPTLogin(){if(BUSY)return;busy(true);try{const d=await post('chatgpt_login_start');$('chatgptUrl').value=d.url||'';$('chatgptOpen').href=d.url||'#';$('chatgptLink').classList.remove('hidden');$('chatgptHint').textContent=d.automatic?'Если панель открыта на самой станции, вход может завершиться сам — тогда нажмите «Проверить вход».':'После входа скопируйте адрес из браузера и вставьте его ниже.';toast('Ссылка готова: откройте её и войдите.')}catch(e){toast(e.message||'Не удалось начать вход.',true)}finally{busy(false)}}
 async function completeChatGPTLogin(){const callback=val('chatgptCallback').trim();if(!/^http:\/\/(127\.0\.0\.1|localhost):\d+\/auth\/callback\?/.test(callback)){toast('Вставьте полный адрес из браузера: http://127.0.0.1:…/auth/callback?…',true);return}if(BUSY)return;busy(true);try{const d=await post('chatgpt_login_complete',{callback});toast(d.message||'Вход выполнен.');$('chatgptCallback').value='';$('chatgptLink').classList.add('hidden');setChatGPTState(true);await loadModels()}catch(e){toast(e.message||'Вход не завершён.',true)}finally{busy(false)}}
 function resetChatGPTLogin(){$('chatgptLink').classList.add('hidden');$('chatgptCallback').value='';$('chatgptHint').textContent=''}
+async function pasteChatGPT(){const input=$('chatgptCallback');input.focus();try{if(navigator.clipboard&&navigator.clipboard.readText){const text=(await navigator.clipboard.readText()).trim();if(text){input.value=text;toast('Адрес вставлен.');return}}throw new Error('clipboard')}catch(e){input.select();toast('Браузер не даёт читать буфер по HTTP. Нажмите ⌘V в поле.',true)}}
 async function logoutChatGPT(){if(!confirm('Выйти из ChatGPT на станции? Пока не войдёте снова, модели подписки будут недоступны.'))return;if(BUSY)return;busy(true);try{const d=await post('chatgpt_logout');toast(d.message||'Выход выполнен.');setChatGPTState(false)}catch(e){toast(e.message||'Не удалось выйти.',true)}finally{busy(false)}}
 function saveGptLook(){act('gpt_settings',{voice:val('voice'),style:val('ledStyle'),scope:val('ledScope'),listen:val('listenLed')})}
 function saveGptNetwork(){const changed=last&&String(last.flags.stun)!==val('stun');if(changed&&!confirm('STUN изменится: GPT будет перезапущен. Сохранить?'))return;act('gpt_settings',{autostart:val('autoGpt'),vpn_autostart:val('autoVpn'),stun:val('stun')})}
@@ -568,6 +574,7 @@ if(location.hash)showTab(location.hash.slice(1));
 function copyText(text){if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(text);return new Promise((ok,bad)=>{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.top='-1000px';document.body.appendChild(ta);ta.select();let done=false;try{done=document.execCommand('copy')}catch(e){done=false}ta.remove();done?ok():bad(new Error('copy failed'))})}
 function setupCopyButtons(){document.querySelectorAll('#tab-help pre').forEach(pre=>{const wrap=document.createElement('div');wrap.className='prewrap';pre.parentNode.insertBefore(wrap,pre);wrap.appendChild(pre);const b=document.createElement('button');b.type='button';b.className='copy-btn';b.textContent='Копировать';b.onclick=()=>copyText(pre.innerText).then(()=>{b.textContent='Скопировано';setTimeout(()=>{b.textContent='Копировать'},1500)},()=>toast('Не удалось скопировать. Выделите текст вручную.',true));wrap.appendChild(b)})}
 document.querySelectorAll('.speaker-ip').forEach(el=>{const h=location.hostname;if(h&&!/^(localhost|127\.|0\.0\.0\.0)/.test(h))el.textContent=h});
+setInterval(()=>{if(document.hidden||BUSY)return;const b=document.querySelector('nav button[data-tab=\"bridge\"]');if(!b||!b.classList.contains('active'))return;if(val('bApi')!=='chatgpt')return;refreshChatGPT(true)},60000);
 setupCopyButtons();
 init();
 </script>
